@@ -1,0 +1,21 @@
+services:
+  utm:
+    build: .
+    volumes:
+      - ./utm:/app/utm
+      - ./strategies:/app/strategies
+      - ./tournaments:/app/tournaments
+      - ./dash:/app/dash
+      - ./docker_entrypoint.sh:/app/docker_entrypoint.sh
+    ports:
+      - "8501:8501"
+    environment:
+      ROLE: ui
+      ENVIRONMENT: local
+      HOME: /app
+      WATCHFILES_IGNORE_PATHS: "/tmp"
+      PYTHONWARNINGS: "ignore::SyntaxWarning"
+      STREAMLIT_SERVER_RUN_ON_SAVE: "false"
+      AXELROD_WRITE_INTERACTIONS: "0" 
+      SUBMIT_PREFIX: s3://utm-ipd/recommendations/
+

@@ -1,0 +1,5 @@
+[server]
+runOnSave = false
+
+[browser]
+favicon = "static/IgnitumSolutions_RGB_Icon.png"

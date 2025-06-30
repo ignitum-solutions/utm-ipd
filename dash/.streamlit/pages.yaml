@@ -1,0 +1,13 @@
+- path: app.py
+  name: IPD Tournament
+
+- path: pages/sweep.py
+  name: IPD Mini Sweep
+
+- path: pages/moran.py
+  name: Moran Process
+
+- path: pages/trust_game.py
+  name: Trust Game
+
+- path: pages/about.md

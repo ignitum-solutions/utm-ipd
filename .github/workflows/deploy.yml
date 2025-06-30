@@ -1,0 +1,61 @@
+name: Build & Deploy UTM-IPD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  TASK_DEF_FILE: infra/task-def.json
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - id: vars
+        run: echo "tag=${GITHUB_SHA::7}" >>"$GITHUB_OUTPUT"
+
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.ECR_REPO }}:latest
+            ${{ secrets.ECR_REPO }}:${{ steps.vars.outputs.tag }}
+          build-args: |
+            GIT_SHA=${{ steps.vars.outputs.tag }}
+
+      - name: Fill task-definition template
+        run: |
+          envsubst < "${{ env.TASK_DEF_FILE }}" > task-def.rendered.json
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          LEADERBOARD_BUCKET: ${{ vars.LEADERBOARD_BUCKET }}
+          RECOMMEND_BUCKET: ${{ vars.RECOMMEND_BUCKET }}
+
+      - id: taskdef
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-def.rendered.json
+          container-name: app
+          image: ${{ secrets.ECR_REPO }}:${{ steps.vars.outputs.tag }}
+
+      - uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.taskdef.outputs.task-definition }}
+          service: ${{ vars.ECS_SERVICE }}
+          cluster: ${{ vars.ECS_CLUSTER }}
+          wait-for-service-stability: true

@@ -1,0 +1,48 @@
+[tool.poetry]
+name        = "utm-ipd"
+version     = "0.1.0"
+description = "Universal Trust Model applied to the Iterated Prisoner Dilemma by Ignitum Solutions"
+authors     = ["Ryan Carlisle <ryan@ignitumsolutions.com>"]
+license     = "MIT"
+packages = [
+  { include = "utm" },
+  { include = "strategies" },
+  { include = "tournaments" }
+]
+
+######################################
+# Runtime dependencies
+######################################
+[tool.poetry.dependencies]
+python     = "^3.13"
+
+# core libs
+axelrod    = "^4.13"
+pandas     = "^2.2"
+numpy      = "^2.2"
+matplotlib = "^3.10"
+streamlit  = "^1.45"
+optuna     = "^4.3"
+boto3      = "^1.38"
+
+######################################
+# Development / testing extras
+######################################
+[tool.poetry.group.dev.dependencies]
+pytest     = "^8.3"
+hypothesis = "^6.131"
+black      = "^25.1"
+ruff       = "^0.11"
+
+######################################
+# Console-script entry-point
+######################################
+[tool.poetry.scripts]
+utm-ipd = "main:__main__"
+
+######################################
+# Build backend
+######################################
+[build-system]
+requires      = ["poetry-core>=1.8"]
+build-backend = "poetry.core.masonry.api"

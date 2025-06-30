@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: >
+  If you use the Universal Trust Model (UTM) in your research, software,
+  or teaching material, please cite this work using the metadata below.
+title: Universal Trust Model (UTM)
+version: 1.0.0
+date-released: 2025-06-29
+
+authors:
+  - family-names: Carlisle
+    given-names: Ryan
+    # orcid: https://orcid.org/0000-0002-XXXX-XXXX     ← In Progress
+
+abstract: >
+  The Universal Trust Model (UTM) is a parameterised learning framework for
+  modelling trust dynamics in repeated decision scenarios. It generalises
+  reinforcement-style updates via theta (θ), positive and negative learning
+  rates (α⁺, α⁻), a decay factor (δ), and a behavioural threshold (τ).
+
+repository-code: https://github.com/ignitum-solutions/utm-ipd
+url: https://utm.ignitumsolutions.com
+license: MIT
+
+# doi: 10.48550/arXiv.YYMM.NNNN                     ← In Progress
+preferred-citation:
+  type: article
+  title: Universal Trust Model (UTM)
+  author:
+    - family-names: Carlisle
+      given-names: Ryan
+  year: 2025
+  journal: arXiv preprint
+  # doi: 10.48550/arXiv.YYMM.NNNN

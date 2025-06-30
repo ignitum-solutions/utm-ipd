@@ -1,0 +1,79 @@
+The Diplomat:
+  creator: Ryan Carlisle
+  description: Starts out friendly and keeps trusting unless repeatedly betrayed.
+  variant: TFT
+  theta: 0.65
+  alpha_pos: 0.03
+  alpha_neg: 0.90
+  delta: 0.80
+  tau: 0.60
+
+The Maverick:
+  creator: Ryan Carlisle
+  description: Shifts strategy aggressively; quick to punish but also quick to recover.
+  variant: WSLS
+  theta: 0.45
+  alpha_pos: 0.03
+  alpha_neg: 0.75
+  delta: 0.65
+  tau: 0.50
+
+The Guardian:
+  creator: Ryan Carlisle
+  description: High baseline trust with a sturdy defense—retaliates only after clear betrayal.
+  variant: TFT
+  theta: 0.70
+  alpha_pos: 0.02
+  alpha_neg: 0.60
+  delta: 0.40
+  tau: 0.60
+
+The Opportunist:
+  creator: Ryan Carlisle
+  description: Low initial trust but eager to cooperate if it sees quick gains.
+  variant: WSLS
+  theta: 0.30
+  alpha_pos: 0.04
+  alpha_neg: 0.55
+  delta: 0.80
+  tau: 0.45
+
+The Visionary:
+  creator: Ryan Carlisle
+  description: Extremely trusting and forgiving, banking on long-term reciprocity.
+  variant: TFT
+  theta: 0.85
+  alpha_pos: 0.05
+  alpha_neg: 0.35
+  delta: 0.40
+  tau: 0.60
+
+The Sentinel:
+  creator: Ryan Carlisle
+  description: Balanced guardian that switches to WSLS mode after sustained conflict.
+  variant: TFT→WSLS
+  theta: 0.55
+  alpha_pos: 0.02
+  alpha_neg: 0.70
+  delta: 0.25
+  tau: 0.65
+
+The Altruist:
+  creator: Ryan Carlisle
+  description: Maximal goodwill—keeps cooperating even under moderate betrayal.
+  variant: TFT
+  theta: 0.90
+  alpha_pos: 0.04
+  alpha_neg: 0.30
+  delta: 0.50
+  tau: 0.60
+
+The Trickster:
+  creator: Ryan Carlisle
+  description: Minimal trust, exploits whenever possible, and rarely forgives.
+  variant: WSLS
+  theta: 0.20
+  alpha_pos: 0.01
+  alpha_neg: 0.50
+  delta: 0.85
+  tau: 0.70
