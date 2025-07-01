@@ -4,9 +4,12 @@
   <img src="dash/static/IgnitumSolutions_RGB_Icon.png" width="120" alt="Ignitum logo">
 </p>
 
-[![License](https://img.shields.io/github/license/ignitum-solutions/utm-ipd)](LICENSE)
-[![Build & Deploy](https://github.com/ignitum-solutions/utm-ipd/actions/workflows/build-deploy.yml/badge.svg?branch=main)](https://github.com/ignitum-solutions/utm-ipd/actions)
+[![License: MIT](https://img.shields.io/github/license/ignitum-solutions/utm-ipd)](LICENSE)
+[![Build & Deploy](https://github.com/ignitum-solutions/utm-ipd/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/ignitum-solutions/utm-ipd/actions/workflows/deploy.yml)
 [![Dockerfile](https://img.shields.io/badge/dockerfile-root%2FDockerfile-blue)](Dockerfile)
+
+> This repository is MIT-licensed. See **LICENSE** and **NOTICE** for attribution details.  
+> Documentation in the _docs/_ folder is released under **CC BY 4.0** (see docs/LICENSE-CC-BY).
 
 ---
 
@@ -14,15 +17,17 @@
 
 UTM is a **five-parameter, continuous trust meter**:
 
-`T_new = T_old + α · (result – T_old)`
+$$
+\boxed{T_{\text{new}} = T_{\text{old}} + \alpha \,(R - T_{\text{old}})}
+$$
 
 It **rises** when an interaction is favourable and **falls** (asymmetrically)
 when it is harmful.  
 Because UTM is **domain-agnostic** and differentiable, it can power everything
 from simple repeated games to large-scale multi-agent simulations.
 
-▶ **Want the math & intuition?**  
-See [`docs/UTM_Explained.md`](docs/UTM_Explained.md).
+**Want the math & intuition?**  
+See [`dash/pages/04_UTM_Explained.md`](dash/pages/04_UTM_Explained.md).
 
 ---
 

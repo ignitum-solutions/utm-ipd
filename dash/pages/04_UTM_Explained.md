@@ -16,7 +16,7 @@ $$
 $$
 
 Think of it as **“old trust” plus a learning-rate times the surprise of the
-result.”**
+result.**
 
 - If the result $$R$$ is **better** than expected, trust goes **up**.
 - If the result is **worse**, trust goes **down**.
