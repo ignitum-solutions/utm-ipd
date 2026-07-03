@@ -161,11 +161,11 @@ def _render_reference_settings(cfg: dict) -> None:
         st.dataframe(
             pd.DataFrame(
                 [
-                    ("θ Initial trust", cfg["theta"]),
-                    ("α⁺ Positive learning", cfg["alpha_pos"]),
-                    ("α⁻ Negative learning", cfg["alpha_neg"]),
-                    ("δ Betrayal ramp", cfg["delta"]),
-                    ("τ Cooperation threshold", cfg["threshold"]),
+                    ("θ Initial trust", f"{cfg['theta']:.3f}"),
+                    ("α⁺ Positive learning", f"{cfg['alpha_pos']:.3f}"),
+                    ("α⁻ Negative learning", f"{cfg['alpha_neg']:.3f}"),
+                    ("δ Betrayal ramp", f"{cfg['delta']:.3f}"),
+                    ("τ Cooperation threshold", f"{cfg['threshold']:.3f}"),
                     ("Inner strategy", cfg["utm_variant"]),
                 ],
                 columns=["Parameter", "Value"],
@@ -188,7 +188,7 @@ def _render_reference_settings(cfg: dict) -> None:
         )
     st.caption("These settings are displayed without launching a live sweep.")
 
-cfg   = sidebar()
+cfg   = sidebar(page_id="mini_sweep", show_tournament_actions=False)
 state = init_state()
 
 st.title("Mini Parameter Sweep")

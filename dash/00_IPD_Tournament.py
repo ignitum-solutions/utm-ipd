@@ -38,7 +38,7 @@ from dash.shared import sidebar
 
 log = logging.getLogger("utm.ipd")
 state = init_state()
-cfg = sidebar()
+cfg = sidebar(page_id="ipd_tournament", show_tournament_actions=True)
 
 st.title("Universal Trust Model → Iterated Prisoner’s Dilemma")
 run_area = st.empty()

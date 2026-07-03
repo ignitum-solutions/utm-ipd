@@ -46,20 +46,11 @@ import logging
 # ---------------------------------------------------------------------------
 # Third-party
 # ---------------------------------------------------------------------------
+import axelrod as axl
 import numpy as np
 import pandas as pd
 import streamlit as st
 from matplotlib import pyplot as plt
-import axelrod as axl
-
-# ---------------------------------------------------------------------------
-# Internal project
-# ---------------------------------------------------------------------------
-from dash.shared import sidebar          # helper to render sidebar controls
-from dash.state import init_state        # session-state initialisation
-from strategies.utm_tft import UTMTFT
-from strategies.utm_wsls import UTMWSLS
-from strategies.utm_tft_wsls import UTMTFT_WSLS
 
 # ---------------------------------------------------------------------------
 # Streamlit page setup
@@ -69,6 +60,16 @@ st.set_page_config(
     page_icon="static/IgnitumSolutions_RGB_Icon.png",
     layout="wide",
 )
+
+# ---------------------------------------------------------------------------
+# Internal project
+# ---------------------------------------------------------------------------
+from dash.shared import sidebar          # helper to render sidebar controls
+from dash.state import init_state        # session-state initialisation
+from strategies.utm_tft import UTMTFT
+from strategies.utm_wsls import UTMWSLS
+from strategies.utm_tft_wsls import UTMTFT_WSLS
+from strategies.utm_pure import TrustOnlyIPDStrategy
 
 logger = logging.getLogger("utm.ipd")
 if not logging.getLogger().hasHandlers():     # fallback if user code sets none
@@ -81,11 +82,12 @@ UTM_REGISTRY = {
     "TFT":      UTMTFT,
     "WSLS":     UTMWSLS,
     "TFT→WSLS": UTMTFT_WSLS,
+    "Trust-only IPD": TrustOnlyIPDStrategy,
 }
 
 # ══════════════════════════════ UI BODY ═══════════════════════════════════
 
-cfg = sidebar()           # sidebar() provides hyper-parameter widgets
+cfg = sidebar(page_id="moran", show_tournament_actions=False)
 state = init_state()      # ensure session state keys exist (not used further)
 
 st.title("Moran Evolutionary Process")

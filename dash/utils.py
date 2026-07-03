@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os
 import pandas as pd, streamlit as st
-import yaml, boto3, io, urllib.parse as up
+import yaml
 from pandas.errors import PyperclipException
 from dash.opponents import NO_EXTRA_OPPONENT
 from .plots import render_plots
@@ -52,6 +52,8 @@ def _load_presets() -> dict:
     """YAML from repo OR s3://bucket/key if PRESETS_S3_URI is set."""
     uri = os.getenv("PRESETS_S3_URI", "config/presets.yaml")
     if uri.startswith("s3://"):
+        import boto3
+
         s3 = boto3.client("s3")
         bucket, key = uri.replace("s3://", "").split("/", 1)
         body = s3.get_object(Bucket=bucket, Key=key)["Body"].read()

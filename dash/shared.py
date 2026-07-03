@@ -15,7 +15,7 @@ presets loader to port UTM to another repeated-game environment.
 """
 
 from __future__ import annotations
-import pathlib, streamlit as st, logging, os, yaml, boto3, datetime, uuid, json
+import pathlib, streamlit as st, logging, os, yaml, datetime, uuid, json
 from dash.opponents import NO_EXTRA_OPPONENT, extra_opponent_options
 from utm.log_config import setup_logging
 
@@ -54,6 +54,8 @@ def _load_presets() -> dict:
     """
     uri = os.getenv("PRESETS_S3_URI", "config/presets.yaml")
     if uri.startswith("s3://"):
+        import boto3
+
         s3 = boto3.client("s3")
         bucket, key = uri.replace("s3://", "").split("/", 1)
         body = s3.get_object(Bucket=bucket, Key=key)["Body"].read()
@@ -68,23 +70,35 @@ PRESETS: dict = _load_presets()
 
 def _fmt(x): return "—" if x is None else f"{x:.2f}"
 
-@st.dialog("Suggest a UTM preset", width="large")
-def reco_dialog():
-    st.info(
-        "Preset suggestions may be stored for research review if submissions are "
-        "enabled. Do not submit confidential, personal, or sensitive information."
-    )
-    name = st.text_input("Name (e.g. Diplomat/Narcissist)", key="d_name")
-    theta = st.slider("θ", 0.0, 1.0, 0.6, 0.01, key="d_theta")
-    alpha_pos = st.slider("α⁺", 0.0, 0.5, 0.03, 0.001, key="d_ap")
-    alpha_neg = st.slider("α⁻", 0.0, 1.0, 0.9, 0.01, key="d_an")
-    delta = st.slider("δ", 0.0, 1.0, 0.8, 0.01, key="d_delta")
-    tau = st.slider("τ", 0.05, 1.0, 0.6, 0.01, key="d_tau")
-    creator = st.text_input("Your name / handle", key="d_creator")
-    desc = st.text_area("Why is this interesting?", key="d_desc")
-    if st.button("Submit", key="d_submit"):
+def _suggest_preset_expander(page_id: str) -> None:
+    """Render suggestion controls inline so no modal survives page changes."""
+    with st.sidebar.expander("Suggest a UTM preset"):
+        st.info(
+            "Preset suggestions may be stored for research review if submissions are "
+            "enabled. Do not submit confidential, personal, or sensitive information."
+        )
+        with st.form(f"{page_id}_suggest_preset_form"):
+            name = st.text_input("Name (e.g. Diplomat/Narcissist)", key=f"{page_id}_d_name")
+            theta = st.slider("θ", 0.0, 1.0, 0.6, 0.01, key=f"{page_id}_d_theta")
+            alpha_pos = st.slider("α⁺", 0.0, 0.5, 0.03, 0.001, key=f"{page_id}_d_ap")
+            alpha_neg = st.slider("α⁻", 0.0, 1.0, 0.9, 0.01, key=f"{page_id}_d_an")
+            delta = st.slider("δ", 0.0, 1.0, 0.8, 0.01, key=f"{page_id}_d_delta")
+            tau = st.slider("τ", 0.05, 1.0, 0.6, 0.01, key=f"{page_id}_d_tau")
+            creator = st.text_input("Your name / handle", key=f"{page_id}_d_creator")
+            desc = st.text_area("Why is this interesting?", key=f"{page_id}_d_desc")
+            submitted = st.form_submit_button("Submit")
+
+        if not submitted:
+            return
+
         prefix = os.getenv("SUBMIT_PREFIX")
         if prefix:
+            try:
+                import boto3
+            except ModuleNotFoundError:
+                st.error("Preset submissions require boto3 to be installed.")
+                return
+
             bucket, *rest = prefix.replace("s3://", "").split("/", 1)
             key = f"{(rest[0] if rest else '')}{datetime.datetime.utcnow():%Y%m%dT%H%M%SZ}_{uuid.uuid4().hex}.json"
             boto3.client("s3").put_object(
@@ -99,12 +113,12 @@ def reco_dialog():
                 ).encode(),
                 ContentType="application/json",
             )
-            st.toast("✅ Suggestion saved; thanks!")
+            st.toast("Suggestion saved; thanks.")
             st.rerun()
         else:
             st.error("SUBMIT_PREFIX environment variable not set.")
 
-def sidebar() -> dict:
+def sidebar(*, page_id: str = "ipd_tournament", show_tournament_actions: bool = True) -> dict:
     # ─── UTM hyper-parameters ─────────────────────────────────────────────
     # These five sliders map 1-to-1 onto UTM symbols θ, α⁺, α⁻, δ, τ.
     # Changing them does **not** alter PD payoffs; they only steer the
@@ -173,22 +187,23 @@ def sidebar() -> dict:
     c["seed"] = st.sidebar.number_input("Seed", 0, 9999, 42)
     c["noise_pct"] = st.sidebar.slider("Noise (%)", 0, 20, 0)
 
-    st.sidebar.markdown("---")
-    st.sidebar.markdown(
-        """
-        <style>
-        .run-sim button{font-size:18px!important;font-weight:700!important;width:100%!important;background:#1f77b4!important;color:white!important;}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-    c["run_clicked"] = st.sidebar.button("▶ Run simulation", key="run_sim", help="Start tournament", type="primary", use_container_width=True)
-    st.sidebar.markdown("---")
-    if st.sidebar.button("Reset History"):
-        st.session_state.get("history", []).clear()
+    c["run_clicked"] = False
+    if show_tournament_actions:
+        st.sidebar.markdown("---")
+        st.sidebar.markdown(
+            """
+            <style>
+            .run-sim button{font-size:18px!important;font-weight:700!important;width:100%!important;background:#1f77b4!important;color:white!important;}
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+        c["run_clicked"] = st.sidebar.button("▶ Run simulation", key="run_sim", help="Start tournament", type="primary", use_container_width=True)
+        st.sidebar.markdown("---")
+        if st.sidebar.button("Reset History", key="reset_history"):
+            st.session_state.get("history", []).clear()
 
-    if st.sidebar.button("Recommend new personality", key="recommend_btn"):
-        reco_dialog()
+    _suggest_preset_expander(page_id)
 
     st.sidebar.caption(
         "Research prototype only. Do not submit confidential or sensitive information."
