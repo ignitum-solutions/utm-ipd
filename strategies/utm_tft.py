@@ -20,8 +20,8 @@ When trust drops below a configurable *threshold*, the player overrides TFT
 and defects until trust has healed.  This mirror-real-world behaviour:
 humans forgive, but only once confidence is re-established.
 
-*Author :* **Ryan Carlisle** — Ignitum Solutions, 2025  
-*License:* MIT (Attribution-required)
+*Author :* **Ryan Carlisle** — Ignitum Solutions, 2025
+*License:* MIT (attribution appreciated)
 """
 
 from __future__ import annotations

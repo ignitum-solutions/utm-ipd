@@ -30,14 +30,15 @@ Notes
       asymmetry where negative events update trust faster than positive
       reinforcement.
 
-Author: Ryan Carlisle, 2025 — released under MIT (Attribution-required).
+Author: Ryan Carlisle, 2025 — released under MIT (attribution appreciated).
 """
 
 from __future__ import annotations
 
 import logging
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, Iterator
 
 logger = logging.getLogger(__name__)
 
@@ -62,13 +63,59 @@ DELTA: Final[float]     = 0.30  # betrayal ramp-up multiplier (δ)
 # This calibration produced stable convergence in our Iterated Prisoner’s
 # Dilemma (IPD) tournaments but can be replaced for other domains.
 # ────────────────────────────────────────────────────────────────────────────
-_REWARD_TABLE: Final[dict[tuple[str, str], float]] = {
+IPD_REWARD_MATRIX_DEFAULTS: Final[dict[tuple[str, str], float]] = {
     ("C", "C"):  1.0,   # mutual cooperation
     ("D", "C"):  0.5,   # I defected, they cooperated
     ("D", "D"): -0.2,   # mutual defection (mild distrust)
     ("C", "D"): -1.0,   # sucker’s payoff / betrayal
 }
 
+_IPD_REWARD_MATRIX: dict[tuple[str, str], float] = dict(IPD_REWARD_MATRIX_DEFAULTS)
+
+def get_ipd_reward_values() -> tuple[float, float, float, float]:
+    """Return IPD reward-matrix values as (R_CC, R_DC, R_DD, R_CD).
+
+    These values are used only by the public IPD simulations to map
+    cooperate/defect outcomes into the signed UTM event reward.
+    """
+    return (
+        _IPD_REWARD_MATRIX[("C", "C")],
+        _IPD_REWARD_MATRIX[("D", "C")],
+        _IPD_REWARD_MATRIX[("D", "D")],
+        _IPD_REWARD_MATRIX[("C", "D")],
+    )
+
+def set_ipd_reward_values(r_cc: float, r_dc: float, r_dd: float, r_cd: float) -> None:
+    """Update the IPD simulation reward matrix used by payoff_to_signed_reward().
+
+    This helper is for academic IPD payoff/reward-matrix experiments only.
+    """
+    global _IPD_REWARD_MATRIX
+
+    def _nz(x: float, eps: float = 1e-6) -> float:
+        return x if x != 0.0 else eps
+
+    _IPD_REWARD_MATRIX = {
+        ("C", "C"): _nz(r_cc),
+        ("D", "C"): _nz(r_dc),
+        ("D", "D"): _nz(r_dd),
+        ("C", "D"): _nz(r_cd),
+    }
+
+@contextmanager
+def temporary_ipd_reward_values(
+    r_cc: float,
+    r_dc: float,
+    r_dd: float,
+    r_cd: float,
+) -> Iterator[None]:
+    """Temporarily override the IPD reward matrix for one local sweep run."""
+    previous = get_ipd_reward_values()
+    set_ipd_reward_values(r_cc, r_dc, r_dd, r_cd)
+    try:
+        yield
+    finally:
+        set_ipd_reward_values(*previous)
 
 # ────────────────────────────────────────────────────────────────────────────
 # Helper: map a raw payoff to the signed reward R used by UTM
@@ -94,7 +141,7 @@ def payoff_to_signed_reward(my_move: str, opp_move: str) -> float:
         If either move is not 'C' or 'D'.
     """
     try:
-        reward = _REWARD_TABLE[(str(my_move), str(opp_move))]
+        reward = _IPD_REWARD_MATRIX[(str(my_move), str(opp_move))]
         logger.debug(
             "payoff_to_signed_reward: my=%s, opp=%s → R=%.3f",
             my_move, opp_move, reward

@@ -16,8 +16,8 @@ Users manipulate sliders to see how
 `alpha_pos`, `alpha_neg`, `delta`, `τ`, and the environment parameters
 shape the trust trajectory and cumulative pay-off.
 
-Author  : **Ryan Carlisle** — Ignitum Solutions, 2025  
-License : MIT (Attribution-required)
+Author  : **Ryan Carlisle** — Ignitum Solutions, 2025
+License : MIT (attribution appreciated)
 
 Notes
 -----

@@ -5,8 +5,8 @@ utm_wsls.py
 A **Win-Stay-Lose-Shift (WSLS)** strategy wrapped by the **Universal Trust
 Model (UTM)** for Axelrod-Py tournaments.
 
-*Author :* **Ryan Carlisle** — Ignitum Solutions, 2025  
-*License:* MIT (Attribution-required)
+*Author :* **Ryan Carlisle** — Ignitum Solutions, 2025
+*License:* MIT (attribution appreciated)
 
 Concept
 -------

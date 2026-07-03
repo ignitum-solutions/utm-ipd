@@ -94,10 +94,12 @@ def run_tournament(
     turns: int = 200,
     repetitions: int = 30,
     seed: Optional[int] = 42,
+    noise: float = 0.0,
     quiet: bool = False,
     csv_dir: Optional[str] = None,
     return_results: bool = False,
 ) -> Union[pd.DataFrame, Tuple[pd.DataFrame, axl.ResultSet]]:
+
     """
     Execute a round-robin IPD tournament and return a leaderboard.
 
@@ -157,7 +159,11 @@ def run_tournament(
     # Run tournament
     # ------------------------------------------------------------------
     tournament = axl.Tournament(
-        list(players), turns=turns, repetitions=repetitions, seed=seed
+        list(players),
+        turns=turns,
+        repetitions=repetitions,
+        seed=seed,
+        noise=noise if noise and noise > 0 else 0,
     )
     log.info("Playing tournament…")
     results = tournament.play(progress_bar=not quiet)

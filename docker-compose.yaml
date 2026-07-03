@@ -17,5 +17,6 @@ services:
       PYTHONWARNINGS: "ignore::SyntaxWarning"
       STREAMLIT_SERVER_RUN_ON_SAVE: "false"
       AXELROD_WRITE_INTERACTIONS: "0" 
-      SUBMIT_PREFIX: s3://utm-ipd/recommendations/
-
+      ENABLE_SWEEP_UI: "false"
+      SUBMIT_PREFIX: ""
+      # Set SUBMIT_PREFIX=s3://your-bucket/recommendations/ to test submissions locally.

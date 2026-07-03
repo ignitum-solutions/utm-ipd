@@ -4,7 +4,10 @@
     {
       "Effect": "Allow",
       "Action": ["s3:GetObject", "s3:PutObject", "s3:ListBucket"],
-      "Resource": ["arn:aws:s3:::utm-ipd", "arn:aws:s3:::utm-ipd/*"]
+      "Resource": [
+        "arn:aws:s3:::YOUR_UTM_IPD_BUCKET",
+        "arn:aws:s3:::YOUR_UTM_IPD_BUCKET/*"
+      ]
     }
   ]
 }

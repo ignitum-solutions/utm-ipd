@@ -2,8 +2,12 @@
 
 The UTM is a lightweight, continuous **trust meter** that rises when an
 interaction is favourable and falls when it is harmful.  
-Because it is **domain-agnostic**, the same scalar can drive any downstream
-policy—whether in IPD, public-goods games, or a larger cognitive agent.
+This public dashboard focuses on academic/research simulations in repeated
+games such as IPD and public-goods games.
+
+This demo is a research prototype. It is not production safety, financial,
+legal, or operational advice, and it does not include confidential private or
+commercial implementation details.
 
 ---
 
@@ -80,8 +84,8 @@ $$
 | δ      | 0 – 1   | Extra penalty for betrayal                                | 0.45         |
 | τ      | 0 – 1   | Defection threshold (IPD Related Variable - UTM-TFT only) | 0.50         |
 
-_Internal research explores more nuanced α-schedules; those variants are
-withheld pending IP filings._
+Additional implementation variants are intentionally outside the scope of this
+public research demo.
 
 ---
 

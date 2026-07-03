@@ -1,5 +1,5 @@
 from __future__ import annotations
-import importlib, logging, random
+import logging, random
 from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
 from typing import List, Tuple
@@ -12,7 +12,9 @@ import tqdm as _tqdm_mod
 from strategies.utm_tft import UTMTFT
 from strategies.utm_wsls import UTMWSLS
 from strategies.utm_tft_wsls import UTMTFT_WSLS
+from strategies.utm_pure      import TrustOnlyIPDStrategy
 from tournaments.run_round_robin import run_tournament
+from dash.opponents import build_extra_opponent
 from dash.shared import PRESETS
 
 logger = logging.getLogger("utm.ipd")
@@ -22,6 +24,7 @@ UTM_REGISTRY = {
     "TFT": UTMTFT,
     "WSLS": UTMWSLS,
     "TFT→WSLS": UTMTFT_WSLS,
+    "Trust-only IPD": TrustOnlyIPDStrategy,
 }
 
 ReturnType = Tuple[pd.DataFrame, List[axl.Player], axl.ResultSet | None]
@@ -94,16 +97,13 @@ def background_task(
         p.name = f"UTM-{name}"
         players.append(p)
 
-    if extra_cls:
-        try:
-            mod, c = extra_cls.rsplit(".", 1)
-            cls = getattr(importlib.import_module(mod), c)
-            p: axl.Player = cls()
-            if noise_wrap:
-                p = axl.Noise(p, noise=0.05)
-            players.append(p)
-        except Exception as exc:
-            logger.warning("Could not load extra opponent '%s': %s", extra_cls, exc)
+    try:
+        extra_player = build_extra_opponent(extra_cls, noise_wrap=noise_wrap)
+    except ValueError:
+        logger.warning("Rejected unsupported extra opponent '%s'", extra_cls)
+        raise
+    if extra_player is not None:
+        players.append(extra_player)
 
     players.insert(0, UTM_REGISTRY[utm_variant](theta, alpha_pos, alpha_neg, delta, threshold))
 

@@ -1,9 +1,69 @@
 import argparse
-import importlib
 import logging
 
 from utm.log_config import setup_logging
 from tournaments.run_round_robin import run_tournament
+
+
+def _build_utm_tft():
+    from strategies.utm_tft import UTMTFT
+
+    return UTMTFT()
+
+
+def _build_tft():
+    import axelrod as axl
+
+    return axl.TitForTat()
+
+
+def _build_wsls():
+    import axelrod as axl
+
+    return axl.WinStayLoseShift()
+
+
+def _build_defector():
+    import axelrod as axl
+
+    return axl.Defector()
+
+
+def _build_cooperator():
+    import axelrod as axl
+
+    return axl.Cooperator()
+
+
+def _build_random():
+    import axelrod as axl
+
+    return axl.Random(p=0.5)
+
+
+APPROVED_PLAYER_BUILDERS = {
+    "utm_tft": _build_utm_tft,
+    "tft": _build_tft,
+    "wsls": _build_wsls,
+    "alld": _build_defector,
+    "allc": _build_cooperator,
+    "random": _build_random,
+}
+
+
+def approved_player_ids() -> tuple[str, ...]:
+    return tuple(APPROVED_PLAYER_BUILDERS)
+
+
+def build_approved_player(name: str):
+    try:
+        return APPROVED_PLAYER_BUILDERS[name]()
+    except KeyError as exc:
+        allowed = ", ".join(approved_player_ids())
+        raise ValueError(
+            f"Unsupported player '{name}'. Choose one of: {allowed}."
+        ) from exc
+
 
 if __name__ == "__main__":
     # ----------------------------------------
@@ -23,7 +83,7 @@ if __name__ == "__main__":
         "--players",
         nargs="*",
         default=["utm_tft", "tft", "wsls", "alld", "allc", "random"],
-        help="List of player identifiers or module paths",
+        help="List of approved player identifiers",
     )
     args = p.parse_args()
     logger.info(
@@ -34,40 +94,18 @@ if __name__ == "__main__":
     )
 
     # ----------------------------------------
-    # 3) Dynamically import and instantiate players
+    # 3) Instantiate approved players
     # ----------------------------------------
     player_objs = []
     for name in args.players:
         logger.info("Loading player '%s'", name)
-        if name == "utm_tft":
-            from strategies.utm_tft import UTMTitForTat
-            player = UTMTitForTat()
-            player_objs.append(player)
-            logger.info("→ Instantiated UTMTitForTat: %s", player)
-        elif name in {"tft", "wsls", "alld", "allc", "random"}:
-            import axelrod as axl
-
-            mapping = {
-                "tft":   axl.TitForTat,
-                "wsls":  axl.WinStayLoseShift,
-                "alld":  axl.Defector,
-                "allc":  axl.Cooperator,
-                "random": lambda: axl.Random(p=0.5),
-            }
-            player = mapping[name]()
-            player_objs.append(player)
-            logger.info("→ Instantiated Axelrod %s: %s", name, player)
-        else:
-            # Allow full module path, e.g. "mypackage.MyPlayer"
-            try:
-                modpath, clsname = name.rsplit(".", 1)
-                cls = getattr(importlib.import_module(modpath), clsname)
-                player = cls()
-                player_objs.append(player)
-                logger.info("→ Dynamically imported %s.%s: %s", modpath, clsname, player)
-            except Exception as e:
-                logger.error("Failed to import '%s': %s", name, e)
-                raise
+        try:
+            player = build_approved_player(name)
+        except ValueError as exc:
+            logger.error("Rejected unsupported player '%s'", name)
+            p.error(str(exc))
+        player_objs.append(player)
+        logger.info("→ Instantiated approved player %s: %s", name, player)
 
     # ----------------------------------------
     # 4) Run the tournament

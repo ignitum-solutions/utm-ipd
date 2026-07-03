@@ -17,8 +17,8 @@ extended betrayal.
 This was an experiment to see if the Universal Trust Model could broach hybrid strategies.
 (It could, but did not win as often as utm_tft in preliminary runs/tests.)
 
-*Author :* **Ryan Carlisle** — Ignitum Solutions, 2025  
-*License:* MIT (Attribution-required)
+*Author :* **Ryan Carlisle** — Ignitum Solutions, 2025
+*License:* MIT (attribution appreciated)
 """
 
 from __future__ import annotations

@@ -28,8 +28,8 @@ Outputs
 * Markdown summary and copy-ready textarea  
 * INFO-level log lines for reproducibility
 
-Author  : **Ryan Carlisle** — Ignitum Solutions, 2025  
-Licence : MIT (Attribution-required)
+Author  : **Ryan Carlisle** — Ignitum Solutions, 2025
+Licence : MIT (attribution appreciated)
 
 Note
 ----

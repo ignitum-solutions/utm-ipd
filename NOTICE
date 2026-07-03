@@ -1,7 +1,15 @@
-Attribution Requirement
------------------------
-Any publication, presentation, or software that uses, adapts, or
-builds upon the Universal Trust Model (UTM) must visibly cite:
+Attribution Requested
+---------------------
+The code is released under the MIT License. Attribution and citation are
+appreciated when you use, adapt, or discuss the Universal Trust Model (UTM),
+but they are not additional conditions on the MIT-licensed code.
+
+Suggested citation:
 
   Carlisle, R. (2025). “Universal Trust Model (UTM).”
   https://utm.ignitumsolutions.com/UTM_Explained
+
+Third-party attribution:
+
+  This project uses Axelrod-Python for Iterated Prisoner's Dilemma strategies
+  and tournament mechanics: https://github.com/Axelrod-Python/Axelrod

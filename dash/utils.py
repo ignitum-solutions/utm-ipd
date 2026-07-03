@@ -3,6 +3,7 @@ import os
 import pandas as pd, streamlit as st
 import yaml, boto3, io, urllib.parse as up
 from pandas.errors import PyperclipException
+from dash.opponents import NO_EXTRA_OPPONENT
 from .plots import render_plots
 
 def _ensure_header(df: pd.DataFrame) -> pd.DataFrame:
@@ -18,7 +19,7 @@ def _ensure_header(df: pd.DataFrame) -> pd.DataFrame:
 
 def summarise_run(**kw) -> str:
     strat_list = [f"UTM-{kw['utm_variant']}", *kw["selected_names"]]
-    if kw["extra_cls"]:
+    if kw["extra_cls"] and kw["extra_cls"] != NO_EXTRA_OPPONENT:
         strat_list.append(kw["extra_cls"] + (" + Noise" if kw["noise_wrap"] else ""))
     return (
         f"**Strategies:** {', '.join(strat_list)}  \n"

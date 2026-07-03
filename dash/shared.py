@@ -16,6 +16,7 @@ presets loader to port UTM to another repeated-game environment.
 
 from __future__ import annotations
 import pathlib, streamlit as st, logging, os, yaml, boto3, datetime, uuid, json
+from dash.opponents import NO_EXTRA_OPPONENT, extra_opponent_options
 from utm.log_config import setup_logging
 
 if "libs" not in st.session_state:
@@ -25,11 +26,18 @@ if "libs" not in st.session_state:
     from strategies.utm_tft import UTMTFT
     from strategies.utm_wsls import UTMWSLS
     from strategies.utm_tft_wsls import UTMTFT_WSLS
+    from strategies.utm_pure import TrustOnlyIPDStrategy
     st.session_state.libs = (
         axl,
         [cls.name for cls in axl.strategies],
-        {"TFT": UTMTFT, "WSLS": UTMWSLS, "TFT→WSLS": UTMTFT_WSLS},
+        {
+            "TFT":        UTMTFT,
+            "WSLS":       UTMWSLS,
+            "TFT→WSLS":   UTMTFT_WSLS,
+            "Trust-only IPD": TrustOnlyIPDStrategy,
+        },
     )
+
 
 axl, STRATEGY_NAMES, UTM_REGISTRY = st.session_state.libs
 _LOGO = pathlib.Path(__file__).parent / "static" / "IgnitumSolutions_Logo.png"
@@ -62,6 +70,10 @@ def _fmt(x): return "—" if x is None else f"{x:.2f}"
 
 @st.dialog("Suggest a UTM preset", width="large")
 def reco_dialog():
+    st.info(
+        "Preset suggestions may be stored for research review if submissions are "
+        "enabled. Do not submit confidential, personal, or sensitive information."
+    )
     name = st.text_input("Name (e.g. Diplomat/Narcissist)", key="d_name")
     theta = st.slider("θ", 0.0, 1.0, 0.6, 0.01, key="d_theta")
     alpha_pos = st.slider("α⁺", 0.0, 0.5, 0.03, 0.001, key="d_ap")
@@ -141,9 +153,18 @@ def sidebar() -> dict:
                 preset_selections.append(name)
     c["utm_presets"] = preset_selections
 
-    with st.sidebar.expander("Advanced: custom opponent"):
-        c["extra_cls"] = st.text_input("Fully-qualified class (e.g. axelrod.Grudger)")
-        c["noise_wrap"] = st.checkbox("Add 5 % noise wrapper", value=False)
+    with st.sidebar.expander("Advanced: approved extra opponent"):
+        c["extra_cls"] = st.selectbox(
+            "Extra opponent",
+            extra_opponent_options(),
+            index=0,
+            help="Only approved built-in Axelrod strategies are available on the public demo.",
+        )
+        c["noise_wrap"] = st.checkbox(
+            "Add 5 % noise wrapper",
+            value=False,
+            disabled=c["extra_cls"] == NO_EXTRA_OPPONENT,
+        )
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("### Tournament")
@@ -168,6 +189,10 @@ def sidebar() -> dict:
 
     if st.sidebar.button("Recommend new personality", key="recommend_btn"):
         reco_dialog()
+
+    st.sidebar.caption(
+        "Research prototype only. Do not submit confidential or sensitive information."
+    )
 
     sha = os.getenv("GIT_SHA", "unknown")
     st.sidebar.markdown(
