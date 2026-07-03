@@ -92,10 +92,10 @@ state = init_state()      # ensure session state keys exist (not used further)
 
 st.title("Moran Evolutionary Process")
 
-generations = st.number_input("Generations", 50, 1_000, 200)
-pop_size = st.slider("Population size", 5, 50, 20)
+generations = st.number_input("Generations", 50, 1_000, 200, key="moran_generations")
+pop_size = st.slider("Population size", 5, 50, 20, key="moran_pop_size")
 
-if st.button("Run Moran"):
+if st.button("Run Moran", key="moran_run"):
     # ── 1. Build initial population ─────────────────────────────────────
     utm_player = UTM_REGISTRY[cfg["utm_variant"]](
         cfg["theta"],
@@ -167,4 +167,9 @@ if st.button("Run Moran"):
     )
     st.markdown(summary_md)
 
-    st.text_area("Copy-ready text", summary_md.replace("**", ""), height=100)
+    st.text_area(
+        "Copy-ready text",
+        summary_md.replace("**", ""),
+        height=100,
+        key="moran_summary_text",
+    )

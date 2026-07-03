@@ -111,14 +111,14 @@ st.title("Investment / Trust Game")
 # ── parameter controls ─────────────────────────────────────────────────────
 colA, colB = st.columns(2)
 with colA:
-    rounds = st.slider("Rounds", 10, 500, 50)
-    send = st.slider("Send amount", 0.0, 10.0, 5.0, 0.5)
+    rounds = st.slider("Rounds", 10, 500, 50, key="trust_game_rounds")
+    send = st.slider("Send amount", 0.0, 10.0, 5.0, 0.5, key="trust_game_send")
 with colB:
-    ret_good = st.slider("Return % (good round)", 0.0, 1.0, 0.50, 0.05)
-    betray_prob = st.slider("Betrayal probability", 0.0, 1.0, 0.00, 0.05)
-    ret_bad = st.slider("Return % (betrayal round)", 0.0, 1.0, 0.00, 0.05)
+    ret_good = st.slider("Return % (good round)", 0.0, 1.0, 0.50, 0.05, key="trust_game_return_good")
+    betray_prob = st.slider("Betrayal probability", 0.0, 1.0, 0.00, 0.05, key="trust_game_betray_prob")
+    ret_bad = st.slider("Return % (betrayal round)", 0.0, 1.0, 0.00, 0.05, key="trust_game_return_bad")
 
-if st.button("▶ Run Trust Game"):
+if st.button("▶ Run Trust Game", key="trust_game_run"):
     tvals, pays = run_trust_game(
         rounds,
         send,
@@ -161,6 +161,7 @@ if st.button("▶ Run Trust Game"):
         "Copy-ready text",
         summary_md.replace("**", "").replace("### ", ""),
         height=110,
+        key="trust_game_summary_text",
     )
 
     # log identical line for debugging
