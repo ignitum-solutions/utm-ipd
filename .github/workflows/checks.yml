@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -25,13 +25,16 @@ jobs:
       - run: npm --prefix frontend test
       - run: npm --prefix frontend run build
       - run: cfn-lint infra/*.yaml
-      - run: npx playwright install --with-deps chromium
+      # The hosted Ubuntu image includes Chromium's runtime libraries.
+      - name: Install test browser
+        run: npx playwright install chromium
         working-directory: frontend
+        timeout-minutes: 5
       - run: npm run test:browser
         working-directory: frontend
   lambda-image:
     if: vars.SERVERLESS_BUILD_ROLE_ARN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write

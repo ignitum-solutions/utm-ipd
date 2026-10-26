@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
       STACK_NAME: ${{ inputs.stack_name }}
@@ -70,8 +70,11 @@ jobs:
       - run: npm --prefix frontend test
       - run: npm --prefix frontend run build
       - run: cfn-lint infra/*.yaml
-      - run: npx playwright install --with-deps chromium
+      # The hosted Ubuntu image includes Chromium's runtime libraries.
+      - name: Install test browser
+        run: npx playwright install chromium
         working-directory: frontend
+        timeout-minutes: 5
       - run: npm run test:browser
         working-directory: frontend
       - uses: aws-actions/configure-aws-credentials@v4
