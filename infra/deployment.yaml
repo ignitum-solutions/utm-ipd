@@ -51,6 +51,36 @@ Resources:
         ScanOnPush: true
       LifecyclePolicy:
         LifecyclePolicyText: '{"rules":[{"rulePriority":1,"description":"Retain the latest 30 deployment images","selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":30},"action":{"type":"expire"}}]}'
+  ImagePullRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com'
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub:
+                  - !Sub 'repo:${GitHubRepository}:ref:refs/heads/${DeploymentBranch}'
+                  - !Sub 'repo:${GitHubRepository}:pull_request'
+      Policies:
+        - PolicyName: PublicImagePull
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ecr-public:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action: sts:GetServiceBearerToken
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    sts:AWSServiceName: ecr-public.amazonaws.com
   DeployRole:
     Type: AWS::IAM::Role
     Properties:
@@ -154,3 +184,5 @@ Outputs:
     Value: !Ref Artifacts
   ImageRepository:
     Value: !GetAtt Images.RepositoryUri
+  ImagePullRoleArn:
+    Value: !GetAtt ImagePullRole.Arn

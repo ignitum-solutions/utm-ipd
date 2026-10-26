@@ -30,9 +30,20 @@ jobs:
       - run: npm run test:browser
         working-directory: frontend
   lambda-image:
+    if: vars.SERVERLESS_BUILD_ROLE_ARN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.SERVERLESS_BUILD_ROLE_ARN }}
+          aws-region: us-east-1
+          allowed-account-ids: ${{ secrets.AWS_ACCOUNT_ID }}
+      - name: Authenticate the public adapter image pull
+        run: aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
       - name: Build the deployment image
         run: |
           set -o pipefail

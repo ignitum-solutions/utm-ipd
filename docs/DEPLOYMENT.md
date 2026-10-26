@@ -48,7 +48,13 @@ aws cloudformation deploy --region us-east-2 --template-file infra/deployment.ya
 ```
 
 Set the GitHub repository variable `SERVERLESS_AWS_ROLE_ARN` to the bootstrap
-stack's `DeployRoleArn` output. The existing secret form of that setting is also
+stack's `DeployRoleArn` output. Set `SERVERLESS_BUILD_ROLE_ARN` to its
+`ImagePullRoleArn` output for authenticated CI image downloads. This separate
+role can obtain public image-pull tokens but cannot access the application,
+deploy resources, or invoke Lambda. Fork pull requests run the Python, frontend,
+and browser checks without AWS credentials; the image job runs for configured
+internal pull requests and `main`. The existing secret form of the deployment
+role setting is also
 accepted. Set `AWS_ACCOUNT_ID` as a repository secret so deployments verify the
 target account. The deployment role manages application resources and build
 storage; it cannot change its own trust policy or publish website DNS changes.
