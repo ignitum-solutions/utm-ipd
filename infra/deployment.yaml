@@ -95,7 +95,7 @@ Resources:
                 Action: [ecr:BatchCheckLayerAvailability, ecr:GetDownloadUrlForLayer, ecr:BatchGetImage, ecr:InitiateLayerUpload, ecr:UploadLayerPart, ecr:CompleteLayerUpload, ecr:PutImage, ecr:DescribeImages, ecr:DescribeRepositories]
                 Resource: !GetAtt Images.Arn
               - Effect: Allow
-                Action: lambda:*
+                Action: [lambda:CreateFunction, lambda:GetFunction, lambda:GetFunctionConfiguration, lambda:UpdateFunctionCode, lambda:UpdateFunctionConfiguration, lambda:DeleteFunction, lambda:GetPolicy, lambda:AddPermission, lambda:RemovePermission, lambda:CreateFunctionUrlConfig, lambda:GetFunctionUrlConfig, lambda:UpdateFunctionUrlConfig, lambda:DeleteFunctionUrlConfig, lambda:PutFunctionConcurrency, lambda:GetFunctionConcurrency, lambda:DeleteFunctionConcurrency, lambda:TagResource, lambda:UntagResource, lambda:ListTags]
                 Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${AppStackName}-Simulation-*'
               - Effect: Allow
                 Action: [iam:CreateRole, iam:DeleteRole, iam:GetRole, iam:UpdateAssumeRolePolicy, iam:PutRolePolicy, iam:DeleteRolePolicy, iam:GetRolePolicy, iam:ListRolePolicies, iam:ListAttachedRolePolicies, iam:TagRole, iam:UntagRole]
@@ -118,12 +118,26 @@ Resources:
               - Effect: Allow
                 Action: logs:DescribeLogGroups
                 Resource: '*'
-              # CloudFront assigns distribution/OAC IDs at creation time.
+              # Distribution creation uses request tags; updates use existing tags.
               - Effect: Allow
-                Action: [cloudfront:CreateDistribution, cloudfront:GetDistribution, cloudfront:GetDistributionConfig, cloudfront:UpdateDistribution, cloudfront:DeleteDistribution, cloudfront:CreateInvalidation, cloudfront:GetInvalidation, cloudfront:TagResource, cloudfront:UntagResource, cloudfront:ListTagsForResource, cloudfront:CreateOriginAccessControl, cloudfront:GetOriginAccessControl, cloudfront:GetOriginAccessControlConfig, cloudfront:UpdateOriginAccessControl, cloudfront:DeleteOriginAccessControl]
-                Resource:
-                  - !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/*'
-                  - !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:origin-access-control/*'
+                Action: [cloudfront:CreateDistribution, cloudfront:TagResource]
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:RequestTag/Application: !Ref AppStackName
+              - Effect: Allow
+                Action: [cloudfront:GetDistribution, cloudfront:GetDistributionConfig, cloudfront:UpdateDistribution, cloudfront:DeleteDistribution, cloudfront:CreateInvalidation, cloudfront:GetInvalidation, cloudfront:UntagResource]
+                Resource: !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/*'
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/Application: !Ref AppStackName
+              - Effect: Allow
+                Action: cloudfront:ListTagsForResource
+                Resource: !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/*'
+              # OAC APIs do not support resource-level IAM permissions.
+              - Effect: Allow
+                Action: [cloudfront:CreateOriginAccessControl, cloudfront:GetOriginAccessControl, cloudfront:GetOriginAccessControlConfig, cloudfront:UpdateOriginAccessControl, cloudfront:DeleteOriginAccessControl]
+                Resource: '*'
 Outputs:
   DeployRoleArn:
     Value: !GetAtt DeployRole.Arn
