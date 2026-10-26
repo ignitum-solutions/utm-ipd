@@ -1,9 +1,7 @@
-# Moving to the React research interface
+# Using the React research interface
 
-Status: unreleased, on `feat/serverless-react-migration`.
-
-The project is moving its public interface from Streamlit to a static React
-frontend and a streaming Python backend. This supports efficient on-demand
+The public interface uses a static React frontend and a streaming Python
+backend. This supports efficient on-demand
 execution, isolated concurrent runs, live synchronization of progress, and
 scalability within explicit limits. It does not replace the Python trust model
 or require researchers to become AWS developers.
@@ -35,7 +33,7 @@ run explicitly if needed; the browser does not automatically resubmit it.
 
 ## If you already cloned this repository
 
-After checking out this branch or the future release containing it:
+From a checkout of this repository:
 
 ```bash
 poetry install

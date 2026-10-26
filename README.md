@@ -8,12 +8,10 @@ An open research interface for exploring how trust changes through repeated
 interactions. Compare UTM strategies in Prisoner’s Dilemma tournaments, follow
 evolution in a Moran process, or explore an investment/Trust Game.
 
-> **Interface migration — in development:** This branch moves the public
-> interface from Streamlit to a React frontend with a streaming Python backend.
-> The change supports efficient on-demand deployment, independent concurrent
-> runs, and live progress synchronization. The Python model and research tools
-> remain available. The hosted site may use the previous release until cutover.
-> See [what changed and how to move](docs/INTERFACE_MIGRATION.md).
+> The web interface uses React and a streaming Python backend. Runs execute
+> independently and report progress directly to the browser. The Python model,
+> CLI, and optional local Streamlit research tools remain available.
+> See [interface setup and usage](docs/INTERFACE_MIGRATION.md).
 
 ## Run the research interface on your computer
 
@@ -35,8 +33,7 @@ npm --prefix frontend ci
 ```
 
 Open **http://127.0.0.1:5173**. Keep the terminal open; press **Ctrl+C** there to
-stop the local application. If you are reading this on the migration branch,
-check out that same branch before following these instructions.
+stop the local application.
 
 On Windows, or if your shell cannot run the launcher, use:
 
