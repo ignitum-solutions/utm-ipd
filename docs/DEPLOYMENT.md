@@ -1,4 +1,4 @@
-# Serverless deployment and cutover
+# Serverless deployment
 
 The application uses a static React frontend and one streaming Python
 Lambda. Local development does not need AWS. This guide is for maintainers;
@@ -26,7 +26,7 @@ Verify all three simulations, progress, downloads, and the warning when leaving
 an active run. Browser tests are documented in the README. A local test does
 not verify CloudFront buffering, IAM origin restrictions, or AWS runtime limits.
 
-## Prepare a separate stack
+## Bootstrap the infrastructure
 
 Use an AWS region supporting Lambda Function URL response streaming. You need
 Docker for the Lambda image build, AWS SAM CLI, AWS CLI, and an authorized AWS
@@ -34,9 +34,8 @@ profile or OIDC deployment role. The deployer needs the CloudFormation, IAM,
 Lambda, ECR, S3, CloudFront, and logging permissions required by this template.
 Do not put credentials, account-specific ARNs, or private data in the repository.
 
-The new stack can coexist with the deployed ECS site during verification.
-Deleting the running service first is not necessary. Use the generated
-CloudFront hostname for validation; attach the public hostname at cutover.
+Use the generated CloudFront hostname to validate a new installation before
+attaching a public hostname. Existing deployments can be updated in place.
 
 Bootstrap the deployment identity and build storage with an authorized local
 AWS profile. The template trusts only this repository's `main` branch; adjust
@@ -69,7 +68,7 @@ sam deploy --stack-name utm-ipd-serverless --region us-east-2 \
   --capabilities CAPABILITY_IAM --parameter-overrides BuildRevision=SOURCE_COMMIT
 ```
 
-Choose a distinct stack name such as `utm-ipd-serverless`. Initially leave
+Use an application stack name such as `utm-ipd-serverless`. Initially leave
 `DomainName` and `CertificateArn` empty. Keep the default concurrency and run
 limits until AWS measurements justify changing them. SAM retains the bucket
 if the stack is removed; submissions are not deleted by a stack rollback.
@@ -85,8 +84,8 @@ before publishing the frontend, waits for distribution invalidation, checks the
 published assets and revision, and verifies denied unsigned origin access.
 The deployment stack name is the application stack name plus `-deployment`.
 
-The deployment workflow is available after it is present on the default branch.
-Run the workflow from `main`, matching the deployment role's OIDC trust policy.
+Run **Deploy serverless playground** from `main`, matching the deployment role's
+OIDC trust policy.
 Use the optional `source_ref` input for a specific source commit/tag, including
 a known-good React release for rollback. A code push alone does not deploy.
 
@@ -118,7 +117,7 @@ script checks that the frontend and backend identify the same source revision.
 The site bucket retains prior object versions, with noncurrent site versions
 expiring after 30 days. Old hashed assets are not deleted during publication.
 
-## Verify the deployed path before cutover
+## Verify the deployed application
 
 - Open `WebsiteUrl` and exercise tournament, Moran, and Trust Game runs.
 - Observe progress arriving incrementally, including on a run over one minute;
@@ -155,35 +154,30 @@ timeout is omitted so it does not impose a shorter total run duration. The
 engine defaults to a 240-second budget, at most 840 seconds, within Lambda's
 900-second limit. Cold starts and return/cleanup need remaining time.
 
-## Switch the hostname and retain rollback
+## Configure a custom hostname
 
-1. Preserve approved presets and existing suggestion objects. Inventory the
-   deployed ECS/Fargate/EC2 service and its dedicated supporting resources.
-2. Obtain or reuse a valid ACM certificate in us-east-1. For a dedicated
+1. Obtain or reuse a valid ACM certificate in us-east-1. For a dedicated
    DNS-validated certificate, deploy `infra/certificate.yaml` in us-east-1 with
    `DomainName` and the existing `HostedZoneId`. Update the new application stack
    with `DomainName` and `CertificateArn`; an alias already attached to an old
    CloudFront distribution must be moved using the appropriate AWS procedure.
-3. Point the production DNS record at the new distribution only after its
+2. Point the production DNS record at the distribution only after its
    certificate and alias are ready. Record the previous DNS target and image
    revision so rollback is concrete.
    `infra/dns.yaml` declares the desired alias and retains it if its stack is
    removed. An existing alias needs a deliberate ownership handover; a template
    cannot be assumed to import an existing record. Prepare and inspect the DNS
    change separately from ordinary application deployments.
-4. Run production smoke tests. Keep the previous service available for a short,
-   planned rollback window, then scale it down and remove only dedicated obsolete
-   resources. Check load balancers, EC2 capacity, volumes, public IPs, networking,
-   and ECR history for resources owned exclusively by the old deployment.
-5. Keep the old ECS workflow manual during transition. Do not run it after
-   retirement without intentionally restoring that architecture. The new source
-   branch alone does not authorize deleting or modifying production resources.
+3. Run production smoke tests through the public hostname, including streaming,
+   downloads, revision matching, and unsigned origin access checks.
 
-Before retiring the legacy service, DNS rollback restores its recorded alias
-target. After retirement, roll back an application release by dispatching the
-workflow from `main` with `source_ref` set to a known-good React release, with
-matching frontend and backend versions. Do not restore only one
-side of the application. Keep the release source and dependency lockfiles.
+## Roll back a release
+
+Dispatch the deployment workflow from `main` with `source_ref` set to a
+known-good source commit or tag. The workflow builds and validates matching
+frontend and backend versions from that revision. Keep the release source and
+dependency lockfiles. DNS continues pointing at the same distribution during
+an application rollback.
 
 ## Access boundary
 
