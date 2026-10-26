@@ -9,8 +9,9 @@ An investment / trust simulation where:
 2. **Trustee (environment)** may betray with probability *p*; if not, it
    returns a user-chosen percentage of the tripled investment.
 3. The investor uses **TrustMeter** and an investment threshold:
-       • Trust increases after profitable rounds, decreases after losses.  
-       • If trust < τ, the investor refuses to send (defects).
+       • The signed reward is +1 for nonnegative payoff, including no investment,
+         and -1 for a loss.
+       • If trust < τ, the investor does not invest.
 
 Users manipulate sliders to see how
 `alpha_pos`, `alpha_neg`, `delta`, `τ`, and the environment parameters
@@ -21,8 +22,8 @@ License : MIT (attribution appreciated)
 
 Notes
 -----
-* Purely a **demo**; it is **not** imported by tournament code.
-* Not related to the IPD in any way.
+* This optional local interface is independent of the hosted React interface.
+* The investment payoff rule is separate from IPD tournament scoring.
 """
 
 from __future__ import annotations
@@ -50,7 +51,7 @@ from utm.trust_meter import TrustMeter
 # ---------------------------------------------------------------------------
 st.set_page_config(
     page_title="Trust Game",
-    page_icon="static/IgnitumSolutions_RGB_Icon.png",  # ensure asset exists
+    page_icon="static/IgnitumSolutions_RGB_Icon.png",
     layout="wide",
 )
 

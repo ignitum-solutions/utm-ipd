@@ -3,7 +3,7 @@
 ###############################################################################
 FROM python:3.13-slim-bookworm AS builder
 
-RUN pip install --upgrade pip && pip install --no-cache-dir poetry
+RUN pip install --no-cache-dir poetry==2.2.1
 
 ENV POETRY_VIRTUALENVS_IN_PROJECT=1 \
     POETRY_NO_INTERACTION=1 \
@@ -21,6 +21,7 @@ COPY utm       ./utm
 COPY strategies ./strategies
 COPY tournaments ./tournaments
 COPY backend ./backend
+COPY main.py ./
 RUN poetry install --only-root --no-interaction
 
 ###############################################################################
@@ -47,10 +48,12 @@ COPY utm         ./utm
 COPY config      ./config
 COPY strategies  ./strategies
 COPY tournaments ./tournaments
+COPY backend     ./backend
 COPY dash        ./dash
+COPY main.py poetry.lock ./
 
 RUN chmod +x docker_entrypoint.sh && chown -R appuser:appuser /app
 USER appuser
 ENTRYPOINT ["./docker_entrypoint.sh"]
 
-EXPOSE 8501 8080
+EXPOSE 8501

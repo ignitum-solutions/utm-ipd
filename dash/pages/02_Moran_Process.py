@@ -2,8 +2,6 @@
 moran.py  –  Streamlit visualiser for an Axelrod-Py Moran evolutionary process
 ==============================================================================
 
-**IMPORTANT NOTE: Still a work in progress/testing.
-
 Purpose
 -------
 Lets you explore how a single **Universal Trust Model** strategy spreads (or
@@ -11,14 +9,13 @@ fails) in a population of Cooperators under the classic Moran birth–death
 process:
 
 * Start population = 1 × UTM variant + (*N–1*) × Cooperator
-* Each generation:
-    1. Randomly choose two players for a 200-round IPD
-    2. Reproduce proportional to score, replacing a random individual
+* Each generation uses Axelrod's birth–death Moran process with 200-turn IPD
+  matches, payoff-proportional reproduction, and random replacement.
 * Track the **share** of UTM players over time.
 
 UI Inputs
 ---------
-* **Generations** – fixed horizon (or runs to fixation on older Axelrod versions)
+* **Generations** – maximum horizon; stops earlier at fixation
 * **Population size** – integer 5 – 50
 * Sidebar controls for the UTM hyper-parameters (handled in *dash.shared*).
 
@@ -31,9 +28,7 @@ Outputs
 Author  : **Ryan Carlisle** — Ignitum Solutions, 2025
 Licence : MIT (attribution appreciated)
 
-Note
-----
-The module is **demo-only**; deleting it will not affect tournament libraries.
+This optional local interface is independent of the hosted React interface.
 """
 
 from __future__ import annotations

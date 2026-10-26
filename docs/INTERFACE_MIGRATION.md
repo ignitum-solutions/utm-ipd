@@ -64,11 +64,6 @@ software versions along with parameters when comparing results across releases.
 
 ## For maintainers
 
-The migration does not require deleting the running site before local testing.
-The new stack can be checked at its generated CloudFront address before the
-existing hostname changes. Only retire dedicated old resources after verifying
-the replacement and preserving presets/submissions. Shared AWS resources remain
-outside the cleanup scope.
-
-See [deployment instructions](DEPLOYMENT.md) for the hosting architecture and
-cutover procedure. Source changes do not deploy the application automatically.
+See [deployment instructions](DEPLOYMENT.md) for infrastructure setup, release
+validation, custom domains, and rollback. Source changes do not deploy the
+application automatically. Local testing requires no changes to the hosted site.

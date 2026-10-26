@@ -21,6 +21,7 @@ jobs:
       - run: pip install poetry==2.2.1 cfn-lint
       - run: poetry install
       - run: npm --prefix frontend ci
+      - run: npm --prefix frontend run format:check
       - run: poetry run pytest -q
       - run: npm --prefix frontend test
       - run: npm --prefix frontend run build

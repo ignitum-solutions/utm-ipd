@@ -171,6 +171,9 @@ npm --prefix frontend test
 npm --prefix frontend run build
 ```
 
+Frontend source formatting is checked in CI. Run `npm --prefix frontend run format`
+before committing frontend edits.
+
 Browser tests start fresh local servers on ports 18000 and 15173. Install the test browser once:
 
 ```bash
@@ -195,15 +198,15 @@ is not part of the production static build.
 
 ## Hosting and optional submissions
 
-The target AWS deployment serves React from private S3 through CloudFront.
+The hosted application serves React from private S3 through CloudFront.
 CloudFront signs requests to an IAM-protected Lambda Function URL; the same
 response carries progress and final results. Each simulation has isolated
 state, and Lambda scales independent requests within the configured concurrency
 limit. There is no application database, cloud queue, or durable job service.
 
-[Deployment and cutover instructions](docs/DEPLOYMENT.md) explain how to validate
-before changing the production hostname. This branch does not deploy itself.
-The previous ECS workflow is retained as a manual legacy workflow.
+[Deployment instructions](docs/DEPLOYMENT.md) cover infrastructure, validation,
+custom domains, and release rollback. Releases use the manual **Deploy serverless
+playground** GitHub workflow from `main`; pushing code does not deploy it.
 
 | Environment variable | Purpose |
 | --- | --- |
@@ -219,8 +222,8 @@ AWS credentials and matching permissions. Preset suggestions are private records
 for review; submitted presets are not automatically published. Do not submit
 personal, confidential, or sensitive information.
 
-Hosted demo: **https://utm.ignitumsolutions.com**. The deployed interface can
-lag this development branch; use its displayed build revision to identify it.
+Hosted demo: **https://utm.ignitumsolutions.com**. Use its displayed build
+revision to identify the deployed source commit.
 
 ## Attribution, licensing, and citation
 
