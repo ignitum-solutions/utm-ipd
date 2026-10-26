@@ -10,6 +10,13 @@ export default function ModelGuide({ source }: { source: string }) {
       remarkPlugins={[remarkGfm, remarkMath]}
       rehypePlugins={[rehypeKatex]}
       skipHtml
+      components={{
+        table: ({ children }) => (
+          <div className="table-scroll">
+            <table>{children}</table>
+          </div>
+        ),
+      }}
     >
       {source.replace(/^# [^\n]+\n/, "")}
     </ReactMarkdown>

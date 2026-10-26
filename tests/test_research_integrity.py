@@ -1,6 +1,7 @@
 """Independent strategy controls, scoring checks, and reproducibility tests."""
 import csv
 from concurrent.futures import ThreadPoolExecutor
+from fractions import Fraction
 from threading import Barrier
 
 import axelrod as axl
@@ -56,9 +57,12 @@ def test_clone_and_reset_do_not_carry_trust_or_history_between_matches(strategy)
     assert axl.Match((p, axl.Random()), turns=15, seed=9).play() == axl.Match((strategy(theta=.7), axl.Random()), turns=15, seed=9).play()
 
 
-def test_utm_can_lose_and_known_payoffs_are_not_boosted():
+@pytest.mark.parametrize("rewards", [(1, .5, -.2, -1), (.2, .8, -.4, -.7)])
+def test_utm_can_lose_and_known_payoffs_are_not_boosted(rewards):
+    # With the gate disabled, changing internal rewards cannot change game scores.
     p = UTMTFT(theta=1, alpha_pos=0, alpha_neg=0, delta=0, threshold=.05)
-    frame = run_tournament([p, axl.Defector()], turns=6, repetitions=3, quiet=True)
+    with temporary_ipd_reward_values(*rewards):
+        frame = run_tournament([p, axl.Defector()], turns=6, repetitions=3, quiet=True)
     utm, opponent = frame.set_index("Player index").loc[0], frame.set_index("Player index").loc[1]
     assert utm["Mean"] == pytest.approx(5 / 6)
     assert opponent["Mean"] == pytest.approx(10 / 6)
@@ -148,3 +152,117 @@ def test_nonfinite_overflow_does_not_partially_update_trust_state():
     with pytest.raises(ValueError, match='overflowed'):
         meter.observe(-1, severity=1e308)
     assert meter.value == .5 and meter._betrayals == 0
+
+
+def test_guide_worked_update():
+    meter = TrustMeter(theta=.6, alpha_pos=.02)
+    meter.observe(1)
+    # 3/5 + (1/50)(1 - 3/5) = 76/125, with no below-trust event.
+    assert meter.value == pytest.approx(float(Fraction(76, 125)), rel=0, abs=1e-15)
+    assert meter._betrayals == 0
+
+
+def test_current_event_and_accumulated_counter_affect_both_update_directions():
+    """Core mechanism with graded rewards, independent of any IPD policy."""
+    meter = TrustMeter(theta=.5, alpha_pos=.25, alpha_neg=.5, delta=.5)
+    # First gain: (1/2)(3/2); next: (1/4)(3/2); third: (1/2)(2).
+    observations = [(.25, Fraction(5, 16), 1),
+                    (.75, Fraction(61, 128), 1),
+                    (.25, Fraction(1, 4), 2)]
+    for reward, expected, counter in observations:
+        meter.observe(reward)
+        assert meter.value == pytest.approx(float(expected), rel=0, abs=1e-15)
+        assert meter._betrayals == counter
+
+
+def test_positive_reward_below_current_trust_reduces_trust():
+    meter = TrustMeter(theta=.6, alpha_pos=.1, alpha_neg=.25, delta=.5)
+    meter.observe(.2)
+    # 3/5 + (1/4)(3/2)(1/5 - 3/5) = 9/20.
+    assert meter.value == pytest.approx(float(Fraction(9, 20)), rel=0, abs=1e-15)
+    assert meter._betrayals == 1
+
+
+@pytest.mark.parametrize("history", [[], [.25]])
+def test_equal_reward_changes_neither_trust_nor_counter(history):
+    meter = TrustMeter(theta=.5, alpha_pos=.25, alpha_neg=.5, delta=.5)
+    for reward in history:
+        meter.observe(reward)
+    before = meter.value, meter._betrayals
+    meter.observe(meter.value)
+    assert (meter.value, meter._betrayals) == before
+
+
+@pytest.mark.parametrize("alpha_neg,rewards,boundary", [(1, [-1], 0), (0, [-1, 1], 1)])
+def test_history_gain_can_reach_either_clipping_boundary(alpha_neg, rewards, boundary):
+    meter = TrustMeter(theta=.5, alpha_pos=1, alpha_neg=alpha_neg, delta=2)
+    # A counter of one gives a multiplier of three; these unbounded updates
+    # would reach -4 or 2. Clipping produces the respective boundary instead.
+    for reward in rewards:
+        meter.observe(reward)
+    assert meter.value == boundary
+    assert meter._betrayals == 1
+
+
+@pytest.mark.parametrize("rate", [Fraction(1, 4), Fraction(1, 2), Fraction(3, 4)])
+@pytest.mark.parametrize("initial", [Fraction(1, 2), Fraction(1, 10)])
+def test_fixed_rate_single_cue_reduction_with_nonzero_graded_outcomes(rate, initial):
+    """Compare with the closed-form fixed-rate solution, not a second UTM loop."""
+    outcomes = [Fraction(1, 5), Fraction(4, 5), Fraction(1, 5), Fraction(1, 5),
+                Fraction(4, 5), Fraction(4, 5), Fraction(1, 5)]
+    meter = TrustMeter(theta=float(initial), alpha_pos=float(rate),
+                       alpha_neg=float(rate), delta=0)
+    for count, outcome in enumerate(outcomes, start=1):
+        expected = ((1 - rate) ** count * initial
+                    + rate * sum((1 - rate) ** (count - 1 - j) * value
+                                 for j, value in enumerate(outcomes[:count])))
+        assert 0 < expected < 1  # The comparison does not activate clipping.
+        meter.observe(float(outcome))
+        assert meter.value == pytest.approx(float(expected), rel=0, abs=1e-14)
+
+
+def test_same_trust_different_history_produces_different_next_update():
+    """Core-mechanism fixture with graded rewards, not an IPD performance result."""
+    untouched = TrustMeter(theta=.5, alpha_pos=.05, alpha_neg=.5, delta=.3)
+    experienced = TrustMeter(theta=.5, alpha_pos=.05, alpha_neg=.5, delta=.3)
+    experienced.observe(.49)
+    assert experienced.value == pytest.approx(.4935, rel=0, abs=1e-15)
+    experienced.observe(.5935)
+    assert experienced.value == pytest.approx(untouched.value, rel=0, abs=1e-15)
+    assert (untouched._betrayals, experienced._betrayals) == (0, 1)
+    untouched.observe(1)
+    experienced.observe(1)
+    assert untouched.value == pytest.approx(.525, rel=0, abs=1e-15)
+    assert experienced.value == pytest.approx(.5325, rel=0, abs=1e-15)
+
+
+def test_zero_severity_can_change_memory_and_is_not_a_missing_observation():
+    meter = TrustMeter(theta=.5, alpha_pos=.05, alpha_neg=.5, delta=.3)
+    meter.observe(.2, severity=0)
+    assert meter.value == .5 and meter._betrayals == 1
+    meter.observe(1)
+    assert meter.value == pytest.approx(.5325, rel=0, abs=1e-15)
+
+
+@pytest.mark.parametrize("theta,promotes", [(.55, False), (.6, True)])
+def test_hybrid_promotion_is_strict_and_can_occur_on_first_decision(theta, promotes):
+    player = UTMTFT_WSLS(theta=theta, promote_at=.55)
+    player.strategy(axl.Cooperator())
+    assert isinstance(player.inner, axl.WinStayLoseShift) == promotes
+
+
+def test_hybrid_promotion_receives_gate_forced_history_and_reset_restores_tft():
+    player = UTMTFT_WSLS(theta=.4, alpha_pos=1, alpha_neg=0, delta=0,
+                         threshold=.45, promote_at=.45)
+    trace = axl.Match((player, axl.Cooperator()), turns=3, seed=42).play()
+    # First D is forced by the gate. After promotion, WSLS must observe DC,
+    # rather than the original TFT proposal C, to keep proposing D.
+    assert trace == [(axl.Action.D, axl.Action.C)] * 3
+    assert isinstance(player.inner, axl.WinStayLoseShift)
+    assert list(player.inner.history) == [axl.Action.D, axl.Action.D]
+    assert player.trust.value == .5
+    player.reset()
+    assert not player.history and not player.inner.history
+    assert isinstance(player.inner, axl.TitForTat)
+    assert player.trust.value == .4 and player.trust._betrayals == 0
+    assert player.promote_at == .45
