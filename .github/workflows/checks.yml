@@ -2,7 +2,7 @@ name: Research playground checks
 on:
   pull_request:
   push:
-    branches: [main, feat/serverless-react-migration]
+    branches: [main]
 permissions:
   contents: read
 jobs:
@@ -34,6 +34,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build the deployment image
-        run: docker build --platform linux/amd64 --tag utm-ipd-lambda:check --file Dockerfile.lambda .
+        run: |
+          set -o pipefail
+          for attempt in 1 2 3; do
+            if docker build --platform linux/amd64 --tag utm-ipd-lambda:check --file Dockerfile.lambda . 2>&1 | tee "$RUNNER_TEMP/lambda-image-build.log"; then
+              exit 0
+            fi
+            grep -qiE '429|too many requests' "$RUNNER_TEMP/lambda-image-build.log" || exit 1
+            [[ "$attempt" == 3 ]] && exit 1
+            sleep 10
+          done
       - name: Verify packaged simulations and streamed responses
         run: bash scripts/check_lambda_image.sh utm-ipd-lambda:check "$GITHUB_SHA"

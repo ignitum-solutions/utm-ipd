@@ -73,16 +73,18 @@ jobs:
         working-directory: frontend
       - run: npm run test:browser
         working-directory: frontend
-      - name: Build and verify the Lambda image
-        run: |
-          sam build --template-file infra/serverless.yaml
-          image=$(poetry run python -c 'import yaml; print(yaml.load(open(".aws-sam/build/template.yaml"), Loader=yaml.BaseLoader)["Resources"]["Simulation"]["Properties"]["ImageUri"])')
-          bash scripts/check_lambda_image.sh "$image" "$RELEASE_SHA"
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.SERVERLESS_AWS_ROLE_ARN || secrets.SERVERLESS_AWS_ROLE_ARN }}
           aws-region: ${{ inputs.aws_region }}
           allowed-account-ids: ${{ secrets.AWS_ACCOUNT_ID }}
+      - name: Authenticate the public adapter image pull
+        run: aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
+      - name: Build and verify the Lambda image
+        run: |
+          sam build --template-file infra/serverless.yaml
+          image=$(poetry run python -c 'import yaml; print(yaml.load(open(".aws-sam/build/template.yaml"), Loader=yaml.BaseLoader)["Resources"]["Simulation"]["Properties"]["ImageUri"])')
+          bash scripts/check_lambda_image.sh "$image" "$RELEASE_SHA"
       - name: Deploy application infrastructure
         run: |
           aws cloudformation describe-stacks --stack-name "$STACK_NAME-deployment" > /tmp/utm-deployment.json
