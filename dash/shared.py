@@ -85,7 +85,7 @@ def _suggest_preset_expander(page_id: str) -> None:
             delta = st.slider("δ", 0.0, 1.0, 0.8, 0.01, key=f"{page_id}_d_delta")
             tau = st.slider("τ", 0.05, 1.0, 0.6, 0.01, key=f"{page_id}_d_tau")
             creator = st.text_input("Your name / handle", key=f"{page_id}_d_creator")
-            desc = st.text_area("Why is this interesting?", key=f"{page_id}_d_desc")
+            desc = st.text_area("Research rationale and expected behavior", key=f"{page_id}_d_desc")
             submitted = st.form_submit_button("Submit")
 
         if not submitted:
@@ -150,7 +150,7 @@ def sidebar(*, page_id: str = "ipd_tournament", show_tournament_actions: bool = 
     ]
     c["selected_names"] = st.sidebar.multiselect("Choose bots", STRATEGY_NAMES, default=default_bots)
 
-    st.sidebar.markdown("#### UTM personalities (Battle-Royale)")
+    st.sidebar.markdown("#### UTM personality presets")
     preset_selections: list[str] = []
     with st.sidebar.expander("Select personalities"):
         for name, spec in PRESETS.items():

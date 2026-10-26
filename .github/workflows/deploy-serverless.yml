@@ -1,0 +1,137 @@
+name: Deploy serverless playground (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      stack_name:
+        description: Serverless application stack name
+        required: true
+        default: utm-ipd-serverless
+      aws_region:
+        description: AWS region containing the application stack
+        required: true
+        default: us-east-2
+      source_ref:
+        description: Optional source commit or tag for a release or rollback; empty uses the selected workflow revision
+        default: ''
+      domain_name:
+        description: Optional custom hostname; leave both domain fields empty to retain the current configuration
+        default: ''
+      certificate_arn:
+        description: Optional issued ACM certificate in us-east-1; required with a hostname
+        default: ''
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: serverless-deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      STACK_NAME: ${{ inputs.stack_name }}
+      AWS_REGION: ${{ inputs.aws_region }}
+      DOMAIN_NAME: ${{ inputs.domain_name }}
+      CERTIFICATE_ARN: ${{ inputs.certificate_arn }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+      - name: Identify release source
+        run: |
+          revision=$(git rev-parse HEAD)
+          echo "RELEASE_SHA=$revision" >> "$GITHUB_ENV"
+          echo "VITE_BUILD_REVISION=$revision" >> "$GITHUB_ENV"
+      - name: Check deployment configuration
+        env:
+          DEPLOY_ROLE: ${{ vars.SERVERLESS_AWS_ROLE_ARN || secrets.SERVERLESS_AWS_ROLE_ARN }}
+          BUILD_ROLE: ${{ vars.SERVERLESS_BUILD_ROLE_ARN }}
+          ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+        run: |
+          [[ "$STACK_NAME" =~ ^[a-z][a-z0-9-]{0,29}$ ]] || { echo 'Use a lowercase stack name of at most 30 characters.' >&2; exit 1; }
+          [[ -n "$DEPLOY_ROLE" && -n "$BUILD_ROLE" && "$ACCOUNT_ID" =~ ^[0-9]{12}$ ]] || { echo 'Configure SERVERLESS_AWS_ROLE_ARN, SERVERLESS_BUILD_ROLE_ARN, and AWS_ACCOUNT_ID before deploying.' >&2; exit 1; }
+          if [[ -n "$DOMAIN_NAME" || -n "$CERTIFICATE_ARN" ]]; then
+            [[ -n "$DOMAIN_NAME" && "$CERTIFICATE_ARN" =~ ^arn:aws:acm:us-east-1:[0-9]{12}:certificate/ ]] || { echo 'Supply both the hostname and its us-east-1 ACM certificate.' >&2; exit 1; }
+          fi
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: aws-actions/setup-sam@v2
+      - run: pip install poetry==2.2.1 cfn-lint
+      - run: poetry install
+      - run: poetry run pytest -q
+      - run: npm --prefix frontend ci
+      - run: npm --prefix frontend test
+      - run: npm --prefix frontend run build
+      - run: cfn-lint infra/*.yaml
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: npm run test:browser
+        working-directory: frontend
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.SERVERLESS_BUILD_ROLE_ARN }}
+          aws-region: us-east-1
+          allowed-account-ids: ${{ secrets.AWS_ACCOUNT_ID }}
+      - name: Authenticate the public adapter image pull
+        run: aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
+      - name: Build and verify the Lambda image
+        run: |
+          sam build --template-file infra/serverless.yaml
+          image=$(poetry run python -c 'import yaml; print(yaml.load(open(".aws-sam/build/template.yaml"), Loader=yaml.BaseLoader)["Resources"]["Simulation"]["Properties"]["ImageUri"])')
+          bash scripts/check_lambda_image.sh "$image" "$RELEASE_SHA"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.SERVERLESS_AWS_ROLE_ARN || secrets.SERVERLESS_AWS_ROLE_ARN }}
+          aws-region: ${{ inputs.aws_region }}
+          allowed-account-ids: ${{ secrets.AWS_ACCOUNT_ID }}
+      - name: Deploy application infrastructure
+        run: |
+          aws cloudformation describe-stacks --stack-name "$STACK_NAME-deployment" > /tmp/utm-deployment.json
+          artifact_bucket=$(python -c 'import json; print(next(o["OutputValue"] for o in json.load(open("/tmp/utm-deployment.json"))["Stacks"][0]["Outputs"] if o["OutputKey"] == "ArtifactBucket"))')
+          image_repository=$(python -c 'import json; print(next(o["OutputValue"] for o in json.load(open("/tmp/utm-deployment.json"))["Stacks"][0]["Outputs"] if o["OutputKey"] == "ImageRepository"))')
+          parameters=("BuildRevision=$RELEASE_SHA")
+          if [[ -n "$DOMAIN_NAME" ]]; then
+            parameters+=("DomainName=$DOMAIN_NAME" "CertificateArn=$CERTIFICATE_ARN")
+          fi
+          sam deploy --stack-name "$STACK_NAME" --region "$AWS_REGION" \
+            --s3-bucket "$artifact_bucket" --image-repository "$image_repository" --capabilities CAPABILITY_IAM \
+            --no-confirm-changeset --no-fail-on-empty-changeset \
+            --parameter-overrides "${parameters[@]}"
+      - name: Read stack outputs and wait for CloudFront
+        run: |
+          aws cloudformation describe-stacks --stack-name "$STACK_NAME" > /tmp/utm-stack.json
+          python - <<'PY'
+          import json, os
+          outputs = {item['OutputKey']:item['OutputValue'] for item in json.load(open('/tmp/utm-stack.json'))['Stacks'][0]['Outputs']}
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              for name, key in [('SITE_BUCKET', 'WebsiteBucket'), ('DISTRIBUTION_ID', 'DistributionId'), ('SITE_URL', 'WebsiteUrl'), ('FUNCTION_URL', 'ProtectedFunctionUrl')]:
+                  value = outputs[key]
+                  assert '\n' not in value and '\r' not in value
+                  env.write(f'{name}={value}\n')
+          PY
+          distribution_id=$(python -c 'import json; print(next(o["OutputValue"] for o in json.load(open("/tmp/utm-stack.json"))["Stacks"][0]["Outputs"] if o["OutputKey"] == "DistributionId"))')
+          aws cloudfront wait distribution-deployed --id "$distribution_id"
+      - name: Verify the AWS backend before publishing the frontend
+        run: python scripts/verify_deployment.py --url "$SITE_URL" --revision "$RELEASE_SHA" --api-only --protected-function-url "$FUNCTION_URL"
+      - name: Upload frontend and refresh distribution
+        run: |
+          aws s3 sync frontend/dist/ "s3://$SITE_BUCKET/site/" --exclude index.html --cache-control 'public,max-age=300'
+          aws s3 cp frontend/dist/index.html "s3://$SITE_BUCKET/site/index.html" --cache-control 'no-cache' --content-type 'text/html'
+          invalidation_id=$(aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" --paths '/*' --query Invalidation.Id --output text)
+          aws cloudfront wait invalidation-completed --distribution-id "$DISTRIBUTION_ID" --id "$invalidation_id"
+      - name: Verify the published release
+        run: python scripts/verify_deployment.py --url "$SITE_URL" --revision "$RELEASE_SHA" --protected-function-url "$FUNCTION_URL" --bucket "$SITE_BUCKET" --region "$AWS_REGION"
+      - name: Record the deployed revision
+        run: |
+          {
+            echo "Deployed revision: $RELEASE_SHA"
+            echo "Website: $SITE_URL"
+            echo 'Hostname/DNS cutover and legacy resource retirement are separate operations.'
+          } >> "$GITHUB_STEP_SUMMARY"

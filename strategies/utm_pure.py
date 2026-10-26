@@ -19,6 +19,7 @@ import axelrod as axl
 from axelrod.action import Action
 
 from utm.trust_meter import TrustMeter, payoff_to_signed_reward
+from strategies.delegation import validate_threshold
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,7 @@ class TrustOnlyIPDStrategy(axl.Player):
         threshold: float = 0.5,
     ) -> None:
         super().__init__()
+        validate_threshold(threshold)
 
         self.trust: TrustMeter = TrustMeter(theta, alpha_pos, alpha_neg, delta)
         self.threshold: float = threshold

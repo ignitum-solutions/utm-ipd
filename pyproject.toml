@@ -7,7 +7,9 @@ license     = "MIT"
 packages = [
   { include = "utm" },
   { include = "strategies" },
-  { include = "tournaments" }
+  { include = "tournaments" },
+  { include = "backend" },
+  { include = "main.py" }
 ]
 
 ######################################
@@ -17,13 +19,20 @@ packages = [
 python     = "^3.13"
 
 # core libs
-axelrod    = "^4.13"
+axelrod    = "4.13.1"
 pandas     = "^2.2"
 numpy      = "^2.2"
 matplotlib = "^3.10"
-streamlit  = "^1.45"
-optuna     = "^4.3"
 boto3      = "^1.38"
+fastapi    = ">=0.115,<1"
+uvicorn    = ">=0.34,<1"
+
+[tool.poetry.group.research]
+optional = true
+
+[tool.poetry.group.research.dependencies]
+streamlit = "^1.45"
+optuna = "^4.3"
 
 ######################################
 # Development / testing extras
@@ -33,12 +42,13 @@ pytest     = "^8.3"
 hypothesis = "^6.131"
 black      = "^25.1"
 ruff       = "^0.11"
+httpx      = ">=0.28,<1"
 
 ######################################
 # Console-script entry-point
 ######################################
 [tool.poetry.scripts]
-utm-ipd = "main:__main__"
+utm-ipd = "main:cli"
 
 ######################################
 # Build backend

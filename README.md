@@ -1,141 +1,238 @@
 # Universal Trust Model × Iterated Prisoner’s Dilemma
 
 <p align="center">
-  <img src="dash/static/IgnitumSolutions_RGB_Icon.png" width="120" alt="Ignitum logo">
+  <img src="dash/static/IgnitumSolutions_RGB_Icon.png" width="100" alt="Ignitum Solutions">
 </p>
 
-[![License: MIT](https://img.shields.io/github/license/ignitum-solutions/utm-ipd)](LICENSE)
-[![Build & Deploy](https://github.com/ignitum-solutions/utm-ipd/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/ignitum-solutions/utm-ipd/actions/workflows/deploy.yml)
-[![Dockerfile](https://img.shields.io/badge/dockerfile-root%2FDockerfile-blue)](Dockerfile)
+An open research interface for exploring how trust changes through repeated
+interactions. Compare UTM strategies in Prisoner’s Dilemma tournaments, follow
+evolution in a Moran process, or explore an investment/Trust Game.
 
-> Code in this repository is MIT-licensed. See **LICENSE** and **NOTICE** for attribution details.
-> Documentation and dashboard Markdown in `docs/` and `dash/pages/*.md` are released under **CC BY 4.0** (see docs/LICENSE-CC-BY).
+> The web interface uses React and a streaming Python backend. Runs execute
+> independently and report progress directly to the browser. The Python model,
+> CLI, and optional local Streamlit research tools remain available.
+> See [interface setup and usage](docs/INTERFACE_MIGRATION.md).
 
----
+## Run the research interface on your computer
 
-## What’s the Universal Trust Model?
+You do not need an AWS account or Docker. Local runs use your own computer.
+The first setup downloads Python and JavaScript dependencies.
 
-UTM is a **five-parameter, continuous trust meter**:
+Install these prerequisites:
 
-$$
-\boxed{T_{\text{new}} = T_{\text{old}} + \alpha \,(R - T_{\text{old}})}
-$$
+- **Python 3.13**
+- **Node.js 22.12 or newer**, including npm
+- **Poetry 2.2 or newer** for Python dependencies
 
-It **rises** when an interaction is favourable and **falls** (asymmetrically)
-when it is harmful.
-Because UTM is **domain-agnostic** and differentiable, it can power everything
-from simple repeated games to large-scale multi-agent simulations.
-
-**Want the math & intuition?**
-See [`dash/pages/04_UTM_Explained.md`](dash/pages/04_UTM_Explained.md).
-
-This public repository is an academic/research prototype for UTM and Iterated
-Prisoner's Dilemma experiments. It is not production safety, financial, legal,
-or operational advice, and it does not include confidential private or
-commercial implementation details.
-
----
-
-## Repo contents
-
-| Path / file                          | Why it’s cool                                                                                    |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| `dash/`                              | **Streamlit playground** – live sliders for θ α⁺ α⁻ δ τ, lightweight demos, and local-only sweep tools. |
-| `tournaments/`                       | Round-robin driver built on Axelrod-Python – live leaderboard with cooperation rates.            |
-| `Dockerfile`                         | Single-step container build; CI tags every image with the git short-SHA.                         |
-| `.github/workflows/build-deploy.yml` | GitHub Actions → ECR → ECS deployment pipeline.                                                  |
-
----
-
-## Quick start (Docker, 30 s)
+From this repository's checkout, run:
 
 ```bash
-docker build -t utm-ipd .
-docker run --rm -p 8501:8501 utm-ipd
-# open http://localhost:8501
-```
-
-_(If you publish to ECR or GHCR, replace the first line with
-`docker pull public.ecr.aws/…/utm-ipd:latest` and run the same command.)_
-
----
-
-## Developer setup (Poetry)
-
-```bash
-git clone https://github.com/ignitum-solutions/utm-ipd.git
-cd utm-ipd
 poetry install
-poetry run streamlit run dash/00_IPD_Tournament.py
+npm --prefix frontend ci
+./run_local.sh
 ```
 
-### Optional env-vars
+Open **http://127.0.0.1:5173**. Keep the terminal open; press **Ctrl+C** there to
+stop the local application.
 
-| Variable         | Purpose                                | Example                       |
-| ---------------- | -------------------------------------- | ----------------------------- |
-| `PRESETS_S3_URI` | Load classroom UTM presets from S3     | `s3://my-bucket/presets.yaml` |
-| `SUBMIT_PREFIX`  | Allow users to upload new preset ideas | `s3://my-bucket/submissions/` |
-| `GIT_SHA`        | (injected by CI) show build hash in UI | `1a2b3c4`                     |
-| `ENABLE_SWEEP_UI` | Enable CPU-intensive sweep pages locally | `true` |
-
-Sweep and scan tools are disabled by default in the hosted demo to protect the
-shared VM. To run them locally after cloning:
+On Windows, or if your shell cannot run the launcher, use:
 
 ```bash
+poetry run python scripts/dev.py
+```
+
+The launcher starts both parts of the application: the browser interface on
+port 5173 and the Python service on port 8000. If a port is already in use, stop
+the other application using it and rerun the command. If `poetry` or `npm` is
+not found, install the prerequisites above and reopen your terminal.
+
+### Your first experiment
+
+1. Open **IPD Tournament** and keep the default settings.
+2. Click **Run simulation** and keep the page open while it runs.
+3. Read measured progress and results above the parameters. The parameter panel
+   collapses during execution; use View parameters or Edit parameters to reopen
+   it. Results can also be hidden and reopened.
+4. Use **Download CSV** for observations or **Results + settings** to save the
+   complete output and the exact parameters used.
+
+The same settings, seed, presets, and software versions allow you to repeat an
+experiment. Changing a seed can change stochastic outcomes. Keep the lockfiles
+with your research environment; separate releases can produce different results.
+
+Each run streams its progress and result directly to your browser. There is no
+background job history. Leaving or refreshing during a run displays a warning
+where the browser supports it; you may lose access to the result. Closing a tab
+cannot guarantee cancellation of a hosted Lambda invocation. A disconnected run
+cannot be recovered or resumed automatically. Download results you want to keep.
+
+The local interface accepts the same bounded requests as the hosted demo. For
+larger experiments, use the Python tools below. The default request time limit
+is four minutes, configurable with `MAX_RUN_SECONDS` up to 840 seconds; the
+engine also checks workload size. Local concurrency defaults to two independent
+runs. Additional requests receive a busy message rather than entering a queue.
+
+## Python research tools
+
+The core model in `utm/`, strategy implementations in `strategies/`, and
+Axelrod-based runner in `tournaments/` are still Python modules. Run a tournament
+without opening the web interface:
+
+```bash
+poetry run python main.py --rounds 200 --reps 30 --players utm_tft tft wsls alld allc random
+```
+
+The CLI does not apply the web demo's workload cap. Start small and increase
+experiment size deliberately. You can also import `run_tournament` or
+`TrustMeter` in your own scripts or notebooks.
+
+### Optional parameter sweeps and previous interface
+
+The existing local Streamlit research tools remain available for reproducibility
+and parameter sweeps. Install their optional dependencies first:
+
+```bash
+poetry install --with research
 ENABLE_SWEEP_UI=true poetry run streamlit run dash/pages/01_IPD_Mini_Sweep.py
 ```
 
-Keep sweeps small. They run tournaments repeatedly and can consume substantial
-CPU. The Streamlit sweep page enforces conservative runtime limits and allows
-one sweep at a time in a single app process.
+Sweeps remain local-only and retain their execution safeguards. To open the
+previous full dashboard:
 
-The optional reward-matrix sweep is IPD-scoped: it varies how cooperate/defect
-outcomes are mapped into signed UTM event rewards for these academic
-simulations.
+```bash
+poetry run streamlit run dash/00_IPD_Tournament.py
+```
 
----
+The original `Dockerfile` and `docker-compose.yaml` support this **legacy local
+interface**, not the React research interface. Existing users can still run:
 
-## Live demo
+```bash
+docker compose up --build
+# Legacy dashboard: http://localhost:8501
+```
 
-The playground is running 24 / 7 at
-▶ **<https://utm.ignitumsolutions.com>**
+`run_local.sh` now launches React and Python instead of Docker Compose. Its old
+`--prune` and `--no-cache` flags are retired; use Docker's own commands when
+working with the optional legacy interface.
 
-No install needed—open the link, tweak the sliders, and watch the
-tournament & Moran dashboards update in real time.
+## Recorded methods and reproducibility
 
-If preset suggestions are enabled on a deployment, submitted names, handles,
-parameters, and descriptions may be stored for review. Do not submit
-confidential, personal, or sensitive information.
+Results contain observations and numerical summaries; the interface does not
+perform or generate an interpretation of a completed run. Download Results +
+settings for the effective protocol, resolved preset parameters, scoring game,
+trust mapping, environment versions, engine revision, and source hashes.
 
----
+Tournament scores use the same game payoffs for every player and exclude
+self-play from leaderboard aggregates. Equal exact means share a rank.
+Cooperation counts come from recorded non-self moves. Local sweep heatmaps
+show the mean of sampled observations in each cell. Implementation details and
+model assumptions are documented alongside the code and in the model guide.
 
-## Third-party attribution
+For full move traces from the CLI, specify a seed and a CSV directory:
 
-This project uses [Axelrod-Python](https://github.com/Axelrod-Python/Axelrod)
-for Iterated Prisoner's Dilemma strategies and tournament mechanics. The
-dashboard is built with Streamlit and scientific Python packages declared in
-`pyproject.toml`.
+```bash
+poetry run python main.py --players utm_tft alld --rounds 100 --reps 5 --seed 42 --csv-dir observations
+```
 
----
+## What is UTM?
 
-## Citation
+UTM is a continuous trust meter, with separate positive and negative learning
+rates and a ramp for repeated betrayals. Its basic update intuition is:
 
-> Carlisle (2025). _The Universal Trust Model._
-> <https://github.com/ignitum-solutions/utm-ipd>
+$$
+T_{new} = T_{old} + \alpha (R - T_{old})
+$$
 
-➡️ A full BibTeX / EndNote entry is available via the
-[CITATION.cff](CITATION.cff) file or the “Cite this repository” button on
-GitHub.
+The implementation also applies severity, betrayal history, and clipping.
+Explore **The Model** in the interface or read the existing
+[model explanation](dash/pages/04_UTM_Explained.md) for context. Trust updates are
+separate from the Prisoner’s Dilemma payoffs used to score tournaments.
 
-## Contributing
+This is an academic research prototype, not production safety, financial, legal,
+or operational advice. Do not submit confidential or sensitive information.
 
-Pull-requests and issues welcome! Please run `pre-commit install`
-and keep `pytest` green before opening a PR.
+## Project layout
 
----
+| Path | Purpose |
+| --- | --- |
+| `frontend/` | Static React + TypeScript research interface |
+| `backend/` | Direct streaming Python HTTP API and simulation services |
+| `utm/`, `strategies/`, `tournaments/` | Reusable model and tournament code |
+| `config/presets.yaml` | Approved research personality presets |
+| `scripts/dev.py`, `run_local.sh` | Local launcher |
+| `dash/` | Optional legacy interface, local sweeps, model documentation |
+| `infra/serverless.yaml`, `Dockerfile.lambda` | AWS deployment template and backend packaging |
 
-## License
+## Development and verification
 
-Code is MIT-licensed. Attribution and citation are appreciated, but not an
-extra legal condition of the MIT license. Documentation and dashboard Markdown
-in `docs/` and `dash/pages/*.md` are CC BY 4.0.
+```bash
+poetry run pytest -q
+npm --prefix frontend test
+npm --prefix frontend run build
+```
+
+Browser tests start fresh local servers on ports 18000 and 15173. Install the test browser once:
+
+```bash
+cd frontend
+npx playwright install chromium
+npm run test:browser
+```
+
+Maintainers can run the two development services separately if preferred:
+
+```bash
+# Terminal 1, repository root
+poetry run python -m uvicorn backend.app:app --host 127.0.0.1 --port 8000
+
+# Terminal 2, repository root
+npm --prefix frontend run dev
+```
+
+`npm --prefix frontend run build` creates static assets in `frontend/dist/`.
+Vite proxies `/api/*` to the local Python service during development; this proxy
+is not part of the production static build.
+
+## Hosting and optional submissions
+
+The target AWS deployment serves React from private S3 through CloudFront.
+CloudFront signs requests to an IAM-protected Lambda Function URL; the same
+response carries progress and final results. Each simulation has isolated
+state, and Lambda scales independent requests within the configured concurrency
+limit. There is no application database, cloud queue, or durable job service.
+
+[Deployment and cutover instructions](docs/DEPLOYMENT.md) explain how to validate
+before changing the production hostname. This branch does not deploy itself.
+The previous ECS workflow is retained as a manual legacy workflow.
+
+| Environment variable | Purpose |
+| --- | --- |
+| `MAX_RUN_SECONDS` | Maximum request duration; default 240, bounded to 840 |
+| `LOCAL_CONCURRENCY` | Per-process local simultaneous runs; default 2 |
+| `PRESETS_S3_URI` | Optional approved preset YAML in S3; default is the repository file |
+| `SUBMIT_PREFIX` | Optional private S3 prefix for suggestions; disabled when unset |
+| `GIT_SHA` | Build revision displayed in the interface |
+| `ENABLE_SWEEP_UI` | Enable optional local research sweeps |
+
+Normal local runs do not call AWS. Only the optional S3 variables above require
+AWS credentials and matching permissions. Preset suggestions are private records
+for review; submitted presets are not automatically published. Do not submit
+personal, confidential, or sensitive information.
+
+Hosted demo: **https://utm.ignitumsolutions.com**. The deployed interface can
+lag this development branch; use its displayed build revision to identify it.
+
+## Attribution, licensing, and citation
+
+This project uses [Axelrod-Python](https://github.com/Axelrod-Python/Axelrod) for
+strategies and tournament mechanics. Dependencies are declared in the Python
+and frontend manifests and lockfiles.
+
+Code is MIT-licensed; see [LICENSE](LICENSE) and [NOTICE](NOTICE). Documentation
+in `docs/` and dashboard Markdown in `dash/pages/` are CC BY 4.0; see
+[documentation license](docs/LICENSE-CC-BY.txt).
+
+Carlisle (2025). *The Universal Trust Model.*
+https://github.com/ignitum-solutions/utm-ipd
+
+See [CITATION.cff](CITATION.cff) for machine-readable citation metadata.

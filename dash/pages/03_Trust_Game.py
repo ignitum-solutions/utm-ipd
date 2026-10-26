@@ -1,14 +1,14 @@
 """
-trust_game.py  –  Streamlit playground for the Universal Trust Model
+trust_game.py  –  Legacy Streamlit research interface for the Universal Trust Model
 ====================================================================
 
-A lightweight “investment / trust game” where:
+An investment / trust simulation where:
 
 1. **Investor (our agent)** decides each round whether to send a fixed amount
    based on its current trust level.
 2. **Trustee (environment)** may betray with probability *p*; if not, it
    returns a user-chosen percentage of the tripled investment.
-3. The investor’s behaviour is governed by **UTM-TitForTat**:
+3. The investor uses **TrustMeter** and an investment threshold:
        • Trust increases after profitable rounds, decreases after losses.  
        • If trust < τ, the investor refuses to send (defects).
 
@@ -43,7 +43,7 @@ from matplotlib import pyplot as plt  # noqa: F401  (used by st.line_chart backe
 # ---------------------------------------------------------------------------
 # Internal imports
 # ---------------------------------------------------------------------------
-from strategies.utm_tft import UTMTFT
+from utm.trust_meter import TrustMeter
 
 # ---------------------------------------------------------------------------
 # Streamlit page metadata
@@ -67,6 +67,7 @@ def run_trust_game(
     alpha_neg: float,
     delta: float,
     tau: float,
+    seed: int = 42,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Simulate *rounds* of the trust game.
@@ -78,28 +79,28 @@ def run_trust_game(
     payoffs : ndarray
         Per-round monetary payoff to the investor.
     """
-    agent = UTMTFT(
+    rng = random.Random(seed)
+    meter = TrustMeter(
         theta=0.5,
         alpha_pos=alpha_pos,
         alpha_neg=alpha_neg,
         delta=delta,
-        threshold=tau,
     )
 
     trust_vals: list[float] = []
     payoffs: list[float] = []
 
     for _ in range(rounds):
-        betrayed = random.random() < betray_prob
+        betrayed = rng.random() < betray_prob
 
-        sent = send if agent.trust.value >= tau else 0.0
+        sent = send if meter.value >= tau else 0.0
         returned = sent * 3 * (ret_bad if betrayed else ret_good)
         payoff = -sent + returned
 
-        # Update trust: +1 for profit, −1 for loss
-        agent.trust.observe(+1 if payoff >= 0 else -1)
+        # Explicit assumption: +1 for nonnegative payoff (including zero).
+        meter.observe(+1 if payoff >= 0 else -1)
 
-        trust_vals.append(agent.trust.value)
+        trust_vals.append(meter.value)
         payoffs.append(payoff)
 
     return np.array(trust_vals), np.array(payoffs)
@@ -118,6 +119,8 @@ with colB:
     betray_prob = st.slider("Betrayal probability", 0.0, 1.0, 0.00, 0.05, key="trust_game_betray_prob")
     ret_bad = st.slider("Return % (betrayal round)", 0.0, 1.0, 0.00, 0.05, key="trust_game_return_bad")
 
+seed = st.number_input("Random seed", 0, 9999, 42, key="trust_game_seed")
+
 if st.button("▶ Run Trust Game", key="trust_game_run"):
     tvals, pays = run_trust_game(
         rounds,
@@ -129,6 +132,7 @@ if st.button("▶ Run Trust Game", key="trust_game_run"):
         alpha_neg=0.50,
         delta=0.55,
         tau=0.45,
+        seed=int(seed),
     )
 
     # ── charts ────────────────────────────────────────────────────────────
@@ -149,10 +153,11 @@ if st.button("▶ Run Trust Game", key="trust_game_run"):
         f"|--------|-------|\n"
         f"| Final trust | {final_trust:.3f} |\n"
         f"| Cumulative payoff | {cum_payoff:.2f} |\n"
-        f"| Coop fraction | {coop_rate:.2f} |\n"
+        f"| Nonnegative payoff fraction | {coop_rate:.2f} |\n"
         f"| Betrayal prob | {betray_prob:.2f} |\n"
         f"| Good return % | {ret_good:.2f} |\n"
-        f"| Bad return % | {ret_bad:.2f} |"
+        f"| Bad return % | {ret_bad:.2f} |\n"
+        f"| Seed | {int(seed)} |"
     )
     st.markdown(summary_md, unsafe_allow_html=True)
 

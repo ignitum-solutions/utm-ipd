@@ -15,7 +15,7 @@ abstract: >
   The Universal Trust Model (UTM) is a parameterised learning framework for
   modelling trust dynamics in repeated decision scenarios. It generalises
   reinforcement-style updates via theta (θ), positive and negative learning
-  rates (α⁺, α⁻), a decay factor (δ), and a behavioural threshold (τ).
+  rates (α⁺, α⁻), a cumulative update ramp (δ), and a behavioural threshold (τ).
 
 repository-code: https://github.com/ignitum-solutions/utm-ipd
 url: https://utm.ignitumsolutions.com

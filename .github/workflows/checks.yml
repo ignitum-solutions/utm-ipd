@@ -1,0 +1,59 @@
+name: Research playground checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: pip install poetry==2.2.1 cfn-lint
+      - run: poetry install
+      - run: npm --prefix frontend ci
+      - run: poetry run pytest -q
+      - run: npm --prefix frontend test
+      - run: npm --prefix frontend run build
+      - run: cfn-lint infra/*.yaml
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: npm run test:browser
+        working-directory: frontend
+  lambda-image:
+    if: vars.SERVERLESS_BUILD_ROLE_ARN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.SERVERLESS_BUILD_ROLE_ARN }}
+          aws-region: us-east-1
+          allowed-account-ids: ${{ secrets.AWS_ACCOUNT_ID }}
+      - name: Authenticate the public adapter image pull
+        run: aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
+      - name: Build the deployment image
+        run: |
+          set -o pipefail
+          for attempt in 1 2 3; do
+            if docker build --platform linux/amd64 --tag utm-ipd-lambda:check --file Dockerfile.lambda . 2>&1 | tee "$RUNNER_TEMP/lambda-image-build.log"; then
+              exit 0
+            fi
+            grep -qiE '429|too many requests' "$RUNNER_TEMP/lambda-image-build.log" || exit 1
+            [[ "$attempt" == 3 ]] && exit 1
+            sleep 10
+          done
+      - name: Verify packaged simulations and streamed responses
+        run: bash scripts/check_lambda_image.sh utm-ipd-lambda:check "$GITHUB_SHA"

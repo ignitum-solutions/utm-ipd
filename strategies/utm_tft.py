@@ -1,27 +1,8 @@
-"""
-utm_tft.py
-~~~~~~~~~~
+"""Trust-gated Tit-for-Tat for repeated-game experiments.
 
-A *trust-aware* variant of Axelrod's classic **Tit-for-Tat (TFT)** strategy.
-
-Motivation
-----------
-Laboratory experiments and large-scale agent-based simulations show that
-*reactive* strategies such as TFT are highly effective in iterated Prisoner’s
-Dilemma (IPD) environments, yet they can still be exploited by noisy or
-strategically opportunistic opponents.  The **Universal Trust Meter (UTM)**
-adds an explicit, continuous trust signal that:
-
-1. **Penalises betrayal quickly** –– trust plunges after negative rewards.
-2. **Recovers slowly** –– cooperation must persist for trust to rebuild.
-3. **Decays toward neutral** –– ancient history matters less each round.
-
-When trust drops below a configurable *threshold*, the player overrides TFT
-and defects until trust has healed.  This mirror-real-world behaviour:
-humans forgive, but only once confidence is re-established.
-
-*Author :* **Ryan Carlisle** — Ignitum Solutions, 2025
-*License:* MIT (attribution appreciated)
+The inner TFT rule receives actual played history, including gate overrides and
+noise. Signed rewards update TrustMeter; trust below the threshold forces D.
+This is a specified action rule, not an empirical claim about human behavior.
 """
 
 from __future__ import annotations
@@ -31,6 +12,7 @@ import logging
 import axelrod as axl
 from axelrod.action import Action
 from utm.trust_meter import TrustMeter, payoff_to_signed_reward
+from strategies.delegation import proposal, validate_threshold
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -53,11 +35,11 @@ class UTMTFT(axl.Player):
     theta :
         Initial trust value :math:`\\theta \\in [0,1]`.
     alpha_pos :
-        Learning-rate for *positive* rewards (cooperation gains trust).
+        Learning rate when reward exceeds current trust.
     alpha_neg :
-        Learning-rate for *negative* rewards (defection erodes trust).
+        Learning rate when reward is at or below current trust.
     delta :
-        Per-round exponential decay toward neutrality (memory length).
+        Cumulative multiplier after rewards below current trust; no time decay.
     threshold :
         If current trust < ``threshold`` then the agent *defects*
         regardless of the inner TFT’s recommendation.
@@ -110,6 +92,7 @@ class UTMTFT(axl.Player):
         threshold: float = 0.45,
     ) -> None:
         super().__init__()
+        validate_threshold(threshold)
 
         # Persistent trust accumulator
         self.trust: TrustMeter = TrustMeter(theta, alpha_pos, alpha_neg, delta)
@@ -170,7 +153,7 @@ class UTMTFT(axl.Player):
 
         # ------------------------- Decide ----------------------------- #
         # 1. Ask vanilla TFT what it *would* do.
-        proposed_move: str = self.inner.strategy(opponent)
+        proposed_move: str = proposal(self.inner, self, opponent)
 
         # 2. Override if trust is too low.
         current_trust: float = self.trust.value

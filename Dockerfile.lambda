@@ -1,0 +1,27 @@
+# Packaging for on-demand Lambda execution; local development uses run_local.sh.
+FROM python:3.13-slim-bookworm AS builder
+RUN pip install --no-cache-dir poetry==2.2.1
+ENV POETRY_VIRTUALENVS_IN_PROJECT=true POETRY_NO_INTERACTION=1
+WORKDIR /app
+COPY pyproject.toml poetry.lock ./
+RUN poetry install --only main --no-root --compile
+
+FROM python:3.13-slim-bookworm
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 /lambda-adapter /opt/extensions/lambda-adapter
+WORKDIR /app
+COPY --from=builder /app/.venv /app/.venv
+COPY backend ./backend
+COPY utm ./utm
+COPY strategies ./strategies
+COPY tournaments ./tournaments
+COPY config ./config
+COPY poetry.lock ./poetry.lock
+COPY dash/__init__.py dash/opponents.py ./dash/
+COPY dash/pages/04_UTM_Explained.md ./dash/pages/04_UTM_Explained.md
+RUN /app/.venv/bin/python -m backend.catalogue --write /app/config/catalogue.json
+ENV PATH="/app/.venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
+    AWS_LWA_PORT=8080 AWS_LWA_INVOKE_MODE=response_stream \
+    AWS_LWA_READINESS_CHECK_PATH=/api/health \
+    MPLCONFIGDIR=/tmp/matplotlib XDG_CACHE_HOME=/tmp/cache LOCAL_CONCURRENCY=1
+EXPOSE 8080
+CMD ["python", "-m", "uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8080", "--no-access-log"]

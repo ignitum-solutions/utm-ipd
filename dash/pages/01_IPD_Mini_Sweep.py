@@ -13,7 +13,7 @@ IPD-specific glue is limited to:
 Porting to another repeated game only requires swapping those parts.
 """
 from __future__ import annotations
-import random, logging, time
+import random, logging, time, json
 from typing import List, Tuple
 
 import axelrod as axl
@@ -44,7 +44,9 @@ from dash.sweep_guard import (
     validate_sweep_budget,
 )
 from dash.state  import init_state
-from tournaments.run_round_robin import run_tournament
+from tournaments.run_round_robin import focal_mean, run_tournament
+from backend.engine import preset_player
+from backend.models import Parameters
 from utm.trust_meter import get_ipd_reward_values, temporary_ipd_reward_values
 from strategies.utm_tft       import UTMTFT
 from strategies.utm_wsls      import UTMWSLS
@@ -72,17 +74,6 @@ _IPD_REWARD_LABELS = [
     ("I cooperate, they defect", "R(CD)"),
 ]
 
-def _build_preset_player(name: str) -> axl.Player:
-    s = PRESETS[name]
-    variant = s.get("variant", "TFT")
-    cls = UTM_REGISTRY.get(variant, UTMTFT)
-    return cls(
-        s.get("theta", 0.6),
-        s.get("alpha_pos", 0.02),
-        s.get("alpha_neg", 0.7),
-        s.get("delta", 0.4),
-        s.get("tau", 0.5),
-    )
 
 def _single_mean(
     variant: str,
@@ -107,7 +98,7 @@ def _single_mean(
     players += [next(cls for cls in axl.strategies if cls.name == n)() for n in opponents]
 
     for name in presets:
-        pl = _build_preset_player(name)
+        pl = preset_player(PRESETS[name], Parameters(theta=θ, alpha_pos=αp, alpha_neg=αn, delta=δ, threshold=τ, variant=variant))
         pl.name = name
         players.append(pl)
 
@@ -132,18 +123,15 @@ def _single_mean(
         with temporary_ipd_reward_values(*reward_params):
             df = _run()
 
-    mask = df["Player"].astype(str).str.startswith("UTM-")
-    if not mask.any():
-        logging.warning("UTM player row not found in tournament summary.")
-        return float("nan")
-    return float(df.loc[mask, "Mean"].iloc[0])
+    return focal_mean(df, player_index=0)
 
 
 def _heatmap(df: pd.DataFrame) -> None:
-    pivot = df.pivot_table("Mean vs field", index="θ", columns="α⁻", aggfunc="max")
+    st.caption("Each heatmap cell is the mean across all sampled settings in that cell; see the table for individual observations.")
+    pivot = df.pivot_table("Mean vs field", index="θ", columns="α⁻", aggfunc="mean")
     fig, ax = plt.subplots()
     im = ax.imshow(pivot, aspect="auto")
-    ax.set_xlabel("α⁻"); ax.set_ylabel("θ"); ax.set_title("UTM Mean Payoff")
+    ax.set_xlabel("α⁻"); ax.set_ylabel("θ"); ax.set_title("Mean score across sampled settings per cell")
     plt.colorbar(im, ax=ax)
     st.pyplot(fig)
 
@@ -241,6 +229,7 @@ with st.expander("Live sweep tools", expanded=False):
 
         if sweep_mode == "IPD reward matrix":
             st.markdown("#### IPD reward matrix")
+            st.caption("Signed rewards must be finite and nonzero. A search containing zero fails validation; zero is never replaced with a small positive number.")
             st.caption(
                 "These controls vary the IPD outcome-to-reward mapping used by this "
                 "simulation only."
@@ -282,6 +271,7 @@ with st.expander("Live sweep tools", expanded=False):
             try:
                 with sweep_execution_guard():
                     started_at = time.monotonic()
+                    search_rng = random.Random(int(cfg["seed"]))
                     if sweep_mode == "UTM parameters":
                         θ_vals  = np.linspace(θ_low , θ_high , steps_θ)
                         αp_vals = np.linspace(αp_low, αp_high, steps_αp)
@@ -301,11 +291,11 @@ with st.expander("Live sweep tools", expanded=False):
                         else:
                             search = [
                                 (
-                                    float(random.choice(θ_vals )),
-                                    float(random.choice(αp_vals)),
-                                    float(random.choice(αn_vals)),
-                                    float(random.choice(δ_vals )),
-                                    float(random.choice(τ_vals )),
+                                    float(search_rng.choice(θ_vals )),
+                                    float(search_rng.choice(αp_vals)),
+                                    float(search_rng.choice(αn_vals)),
+                                    float(search_rng.choice(δ_vals )),
+                                    float(search_rng.choice(τ_vals )),
                                 )
                                 for _ in range(rand_ct)
                             ]
@@ -358,10 +348,10 @@ with st.expander("Live sweep tools", expanded=False):
                         else:
                             search_rewards = [
                                 (
-                                    float(random.choice(r_cc_vals)),
-                                    float(random.choice(r_dc_vals)),
-                                    float(random.choice(r_dd_vals)),
-                                    float(random.choice(r_cd_vals)),
+                                    float(search_rng.choice(r_cc_vals)),
+                                    float(search_rng.choice(r_dc_vals)),
+                                    float(search_rng.choice(r_dd_vals)),
+                                    float(search_rng.choice(r_cd_vals)),
                                 )
                                 for _ in range(rand_ct)
                             ]
@@ -412,18 +402,34 @@ with st.expander("Live sweep tools", expanded=False):
 
                         # Simple 2D heatmap: R(CC) vs R(CD)
                         pivot = df.pivot_table(
-                            "Mean vs field", index="R(CC)", columns="R(CD)", aggfunc="max"
+                            "Mean vs field", index="R(CC)", columns="R(CD)", aggfunc="mean"
                         )
                         fig, ax = plt.subplots()
                         im = ax.imshow(pivot, aspect="auto")
                         ax.set_xlabel("R(CD) – betrayed")
                         ax.set_ylabel("R(CC) – mutual cooperation")
-                        ax.set_title("UTM Mean Payoff (IPD reward-matrix sweep)")
+                        ax.set_title("Mean score across sampled reward settings per cell")
                         plt.colorbar(im, ax=ax)
                         st.pyplot(fig)
                         state["last_sweep_search"] = search_rewards
 
                     # common TSV + download
+                    df["UTM variant"] = cfg["utm_variant"]
+                    df["Opponents"] = json.dumps(cfg["selected_names"])
+                    df["Presets"] = json.dumps({name: PRESETS[name] for name in cfg["utm_presets"]})
+                    df["Extra opponent"] = cfg["extra_cls"]
+                    df["Extra noise wrapper"] = cfg["noise_wrap"]
+                    df["Search sampling"] = "grid" if grid_on else "seeded random with replacement"
+                    if sweep_mode == "IPD reward matrix":
+                        for column, value in zip(("θ", "α⁺", "α⁻", "δ", "τ"), fixed_p):
+                            df[column] = value
+                    else:
+                        for column, value in zip(("R(CC)", "R(DC)", "R(DD)", "R(CD)"), get_ipd_reward_values()):
+                            df[column] = value
+                    df["Seed"] = cfg["seed"]
+                    df["Rounds"] = sweep_rounds
+                    df["Repetitions"] = sweep_reps
+                    df["Noise (%)"] = noise_pct
                     tsv = df.to_csv(sep="\t", index=False)
                     st.text_area("Results (TSV – copy/paste)", value=tsv,
                                  height=min(400, 32 + 18 * len(df) + 50))
@@ -432,6 +438,13 @@ with st.expander("Live sweep tools", expanded=False):
                                        file_name="sweep_results.csv",
                                        mime="text/csv")
 
+                    from backend.provenance import provenance
+                    method = provenance("tournament")
+                    method["signed_trust_rewards"] = "Per-observation R(CC), R(DC), R(DD), R(CD) columns"
+                    method["search"] = {"mode": sweep_mode, "grid": grid_on, "seed": int(cfg["seed"]), "heatmap_aggregation": "mean across all sampled rows in each cell"}
+                    st.download_button("Download observations and protocol (JSON)",
+                                       data=json.dumps({"metadata": method, "observations": df.to_dict(orient="records")}, ensure_ascii=False, allow_nan=False),
+                                       file_name="sweep_observations.json", mime="application/json")
                     state["last_sweep_noise"] = noise_pct
                     st.success("Sweep completed!")
             except (SweepDisabledError, SweepBusyError, SweepTimeoutError, ValueError) as exc:

@@ -1,217 +1,86 @@
-# tournaments/run_round_robin.py
+"""Axelrod round robin with uniform, explicit aggregation for every player.
+
+Self-play is simulated by Axelrod but excluded from leaderboard aggregates.
+Rows identify player slots. Raw match CSVs can be
+retained with csv_dir; JSON services also expose per-repetition observations.
 """
-Round-robin driver for Iterated Prisoner’s Dilemma experiments that use UTM.
-
-This file is *IPD-specific* glue around Axelrod-Python.  It does **not**
-contain any UTM maths; instead it:
-
-1. Receives a list of `axelrod.Player` objects (some may wrap UTM).
-2. Runs an Axelrod tournament (turns × repetitions).
-3. Returns a `pandas.DataFrame` leaderboard plus (optionally) the raw
-   `axl.ResultSet` for downstream plotting.
-
-If you adapt UTM to another repeated-game domain,
-replace only this runner and the reward-mapping code in `utm/trust_meter.py`.
-"""
-
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
-from typing import Iterable, Optional, Tuple, Union
+from typing import Callable, Iterable
+from uuid import uuid4
 
 import axelrod as axl
 import numpy as np
 import pandas as pd
 
+from tournaments.progress import ProgressTournament
+
 log = logging.getLogger("utm.ipd")
-if not logging.getLogger().hasHandlers():
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────────────────────────────────────
-def _scores_stats(results: axl.ResultSet, player_names: list[str]) -> tuple[list[float], list[float], list[float]]:
-    """
-    Extract mean, median, stdev per player in a version-agnostic way.
 
-    Axelrod-Python changed its API around v5 → v6.  This helper shields us
-    from that by picking whichever attribute exists.
+def focal_mean(frame: pd.DataFrame, player_index: int = 0) -> float:
+    """Select an exact input slot, irrespective of labels or leaderboard order."""
+    rows = frame.loc[frame["Player index"] == player_index, "Mean"]
+    if len(rows) != 1:
+        raise ValueError("The focal player slot is missing or duplicated.")
+    value = float(rows.iloc[0])
+    if not np.isfinite(value):
+        raise ValueError("The focal player score is not finite.")
+    return value
 
-    Returns
-    -------
-    means, medians, stds : lists of float (one element per player)
-    """
-    if hasattr(results, "mean_score_per_player"):  # ≥ v6.0
-        return (
-            list(results.mean_score_per_player),
-            list(results.median_score_per_player),
-            list(results.score_std_per_player),
-        )
 
-    # Fallback for v5.x
-    try:
-        nscores = results.normalised_scores
-    except AttributeError as exc:  # pragma: no cover
-        raise RuntimeError("Unsupported Axelrod version – cannot retrieve scores") from exc
-
-    means   = [float(np.mean(s))   if s else float("nan") for s in nscores]
-    medians = [float(np.median(s)) if s else float("nan") for s in nscores]
-    stds    = [float(np.std(s))    if s else float("nan") for s in nscores]
-    return means, medians, stds
-
-def _coop_rates(resultset: axl.ResultSet) -> list[float]:
-    """
-    Return per-player cooperation rates (decimals in [0, 1]).
-
-    Works with all known Axelrod versions.
-    """
-    # Newer field first
-    for attr in (
-        "cooperating_rating",           # ≥ 6.0
-        "cooperation_rate_per_player",  # some dev snapshots
-        "normalised_cooperation_rates", # ≤ 5.x
-    ):
-        if hasattr(resultset, attr):
-            return list(map(float, getattr(resultset, attr)))
-
-    # Last-ditch: average the NxN matrix that is always present
-    if hasattr(resultset, "normalised_cooperation"):
-        mat = resultset.normalised_cooperation
-        n   = len(mat)
-        return [float(np.mean([mat[i][j] for j in range(n) if j != i]))
-                for i in range(n)]
-
-    raise AttributeError("ResultSet has no cooperation-rate data.")
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Public API
-# ─────────────────────────────────────────────────────────────────────────────
 def run_tournament(
-    players: Iterable[axl.Player],
-    *,
-    turns: int = 200,
-    repetitions: int = 30,
-    seed: Optional[int] = 42,
-    noise: float = 0.0,
-    quiet: bool = False,
-    csv_dir: Optional[str] = None,
-    return_results: bool = False,
-) -> Union[pd.DataFrame, Tuple[pd.DataFrame, axl.ResultSet]]:
+    players: Iterable[axl.Player], *, turns: int = 200, repetitions: int = 30,
+    seed: int | None = 42, noise: float = 0.0, quiet: bool = False,
+    csv_dir: str | None = None, return_results: bool = False,
+    progress_callback: Callable[[int, int], None] | None = None,
+    checkpoint: Callable[[], None] | None = None, game: axl.Game | None = None,
+):
+    """Return full-precision statistics; reject invalid or incomplete results.
 
+    Mean/Median/Stdev describe per-repetition mean score per turn against other
+    player slots, with population standard deviation (ddof=0). Counts are exact
+    sums of recorded non-self moves; C-rate is #C / (#C + #D). Equal means share
+    a competition rank. Tied rows sort by label, then slot.
     """
-    Execute a round-robin IPD tournament and return a leaderboard.
-
-    Parameters
-    ----------
-    players : iterable of `axelrod.Player`
-        Instances to include in the tournament.  They can be pure Axelrod
-        strategies, UTM-wrapped strategies, or any mix.
-    turns : int, default 200
-        Number of turns per match.
-    repetitions : int, default 30
-        Re-runs of the entire round-robin (handles stochastic strategies).
-    seed : int or None, default 42
-        RNG seed used by Axelrod’s tournament for reproducibility.
-    quiet : bool, default False
-        Suppress progress bar and most logging.
-    csv_dir : str or None, default None
-        Directory in which Axelrod should dump per-match CSV files.
-        None → disable CSV output.
-    return_results : bool, default False
-        If *True*, returns a ``(DataFrame, ResultSet)`` tuple; otherwise
-        just the leaderboard DataFrame.
-
-    Returns
-    -------
-    pandas.DataFrame
-        Columns: Strategy | Mean | Median | Stdev | % Coop
-    axl.ResultSet, optional
-        Only if *return_results* is True.
-
-    Notes
-    -----
-    * Mean, median, stdev are computed on *normalised* scores (0–5 scale).
-    * `% Coop` is the per-player cooperation rate across the entire run.
-    * CSV output uses Axelrod’s built-in mechanism, controlled via env vars.
-    """
-
-    player_names = [str(p) for p in players]
-    log.info(
-        "Tournament config → players=%s | turns=%d | reps=%d | seed=%s | csv_dir=%s",
-        player_names, turns, repetitions, seed, csv_dir or "disabled",
-    )
-
-    # ------------------------------------------------------------------
-    # Axelrod CSV behaviour (IPD-library detail, not UTM)
-    # ------------------------------------------------------------------
-    if csv_dir is None:
-        os.environ["AXELROD_SAVE_INTERACTIONS"] = "0"
-    else:
-        out = Path(csv_dir).expanduser()
-        out.mkdir(parents=True, exist_ok=True)
-        os.environ["AXELROD_SAVE_INTERACTIONS"] = "1"
-        os.environ["AXELROD_OUTPUT_DIR"] = str(out)
-        log.info("CSV writing enabled → %s", out)
-
-    # ------------------------------------------------------------------
-    # Run tournament
-    # ------------------------------------------------------------------
-    tournament = axl.Tournament(
-        list(players),
-        turns=turns,
-        repetitions=repetitions,
-        seed=seed,
-        noise=noise if noise and noise > 0 else 0,
-    )
-    log.info("Playing tournament…")
-    results = tournament.play(progress_bar=not quiet)
-    log.info("Tournament complete")
-
-    means, medians, stds = _scores_stats(results, player_names)
-
-    # ------------------------------------------------------------------
-    # Cooperation statistics (API changed v5 → v6)
-    # ------------------------------------------------------------------
-    
-    coop_rates = _coop_rates(results)
-    coop_pct      = [round(r * 100, 1) for r in coop_rates]
-    total_turns   = turns * repetitions * (len(players) - 1)
-    coop_counts   = [int(round(r * total_turns)) for r in coop_rates]
-    defect_counts = [total_turns - c for c in coop_counts]
-
-    summary = pd.DataFrame(
-        {
-            "Strategy": player_names,
-            "Mean":    [round(m, 3) for m in means],
-            "Median":  [round(m, 3) for m in medians],
-            "Stdev":   [round(s, 3) for s in stds],
-            "% Coop":  coop_pct,
-        }
-    )
-    log.info("Run summary:\n%s", summary.to_string(index=False))
-
-    # ------------------------------------------------------------------
-    # Diagnostic leaderboard (adds counts of C/D)
-    # ------------------------------------------------------------------
-
-    df = pd.DataFrame(
-        {
-            "Player":  player_names,
-            "Mean":    means,
-            "Median":  medians,
-            "Stdev":   stds,
-            "#C":      coop_counts,
-            "#D":      defect_counts,
-            "C-rate":  [round(r, 3) if not np.isnan(r) else np.nan for r in coop_rates],
-        }
-    ).sort_values("Mean", ascending=False).reset_index(drop=True)
-
+    players = list(players)
+    if len(players) < 2:
+        raise ValueError("A tournament needs at least two player slots.")
+    if isinstance(turns, bool) or not isinstance(turns, int) or turns < 1:
+        raise ValueError("turns must be a positive integer.")
+    if isinstance(repetitions, bool) or not isinstance(repetitions, int) or repetitions < 1:
+        raise ValueError("repetitions must be a positive integer.")
+    if not np.isfinite(noise) or not 0 <= noise <= 1:
+        raise ValueError("noise must be finite and between 0 and 1.")
+    game = game if game is not None else axl.Game(r=3, s=0, t=5, p=1)
+    filename = None
+    if csv_dir is not None:
+        directory = Path(csv_dir).expanduser()
+        directory.mkdir(parents=True, exist_ok=True)
+        filename = str(directory / f"interactions-{uuid4().hex}.csv")
+        log.info("Retaining raw match CSV: %s", filename)
+    tournament = ProgressTournament(players, turns=turns, repetitions=repetitions,
+                                    seed=seed, noise=noise, game=game,
+                                    progress_callback=progress_callback, checkpoint=checkpoint)
+    results = tournament.play(progress_bar=not quiet, filename=filename)
+    rows = []
+    for index, player in enumerate(players):
+        scores = np.asarray(results.normalised_scores[index], dtype=float)
+        if len(scores) != repetitions or not np.isfinite(scores).all():
+            raise ValueError(f"Missing or non-finite scores for player slot {index}.")
+        cooperations = int(sum(count for j, count in enumerate(results.cooperation[index]) if j != index))
+        total = int(sum(length for rep in results.match_lengths for j, length in enumerate(rep[index]) if j != index))
+        if total != turns * repetitions * (len(players) - 1) or not 0 <= cooperations <= total:
+            raise ValueError(f"Incomplete move counts for player slot {index}.")
+        rows.append({"Player index": index, "Player": str(player),
+                     "Mean": float(np.mean(scores)), "Median": float(np.median(scores)),
+                     "Stdev": float(np.std(scores, ddof=0)), "#C": cooperations,
+                     "#D": total - cooperations, "C-rate": cooperations / total})
+    frame = pd.DataFrame(rows)
+    frame.insert(0, "Rank", frame["Mean"].rank(method="min", ascending=False).astype(int))
+    frame = frame.sort_values(["Mean", "Player", "Player index"], ascending=[False, True, True], kind="stable").reset_index(drop=True)
     if not quiet:
-        try:
-            log.info("Leaderboard with diagnostics:\n%s", df.to_markdown(index=False))
-        except Exception:
-            log.info("Leaderboard with diagnostics:\n%s", df.to_string(index=False))
-
-    return (df, results) if return_results else df
+        log.info("Leaderboard:\n%s", frame.to_string(index=False))
+    return (frame, results) if return_results else frame
