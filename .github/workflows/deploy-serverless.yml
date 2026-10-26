@@ -46,10 +46,11 @@ jobs:
       - name: Check deployment configuration
         env:
           DEPLOY_ROLE: ${{ vars.SERVERLESS_AWS_ROLE_ARN || secrets.SERVERLESS_AWS_ROLE_ARN }}
+          BUILD_ROLE: ${{ vars.SERVERLESS_BUILD_ROLE_ARN }}
           ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
         run: |
           [[ "$STACK_NAME" =~ ^[a-z][a-z0-9-]{0,29}$ ]] || { echo 'Use a lowercase stack name of at most 30 characters.' >&2; exit 1; }
-          [[ -n "$DEPLOY_ROLE" && "$ACCOUNT_ID" =~ ^[0-9]{12}$ ]] || { echo 'Configure SERVERLESS_AWS_ROLE_ARN and AWS_ACCOUNT_ID before deploying.' >&2; exit 1; }
+          [[ -n "$DEPLOY_ROLE" && -n "$BUILD_ROLE" && "$ACCOUNT_ID" =~ ^[0-9]{12}$ ]] || { echo 'Configure SERVERLESS_AWS_ROLE_ARN, SERVERLESS_BUILD_ROLE_ARN, and AWS_ACCOUNT_ID before deploying.' >&2; exit 1; }
           if [[ -n "$DOMAIN_NAME" || -n "$CERTIFICATE_ARN" ]]; then
             [[ -n "$DOMAIN_NAME" && "$CERTIFICATE_ARN" =~ ^arn:aws:acm:us-east-1:[0-9]{12}:certificate/ ]] || { echo 'Supply both the hostname and its us-east-1 ACM certificate.' >&2; exit 1; }
           fi
@@ -75,8 +76,8 @@ jobs:
         working-directory: frontend
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.SERVERLESS_AWS_ROLE_ARN || secrets.SERVERLESS_AWS_ROLE_ARN }}
-          aws-region: ${{ inputs.aws_region }}
+          role-to-assume: ${{ vars.SERVERLESS_BUILD_ROLE_ARN }}
+          aws-region: us-east-1
           allowed-account-ids: ${{ secrets.AWS_ACCOUNT_ID }}
       - name: Authenticate the public adapter image pull
         run: aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
@@ -85,6 +86,11 @@ jobs:
           sam build --template-file infra/serverless.yaml
           image=$(poetry run python -c 'import yaml; print(yaml.load(open(".aws-sam/build/template.yaml"), Loader=yaml.BaseLoader)["Resources"]["Simulation"]["Properties"]["ImageUri"])')
           bash scripts/check_lambda_image.sh "$image" "$RELEASE_SHA"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.SERVERLESS_AWS_ROLE_ARN || secrets.SERVERLESS_AWS_ROLE_ARN }}
+          aws-region: ${{ inputs.aws_region }}
+          allowed-account-ids: ${{ secrets.AWS_ACCOUNT_ID }}
       - name: Deploy application infrastructure
         run: |
           aws cloudformation describe-stacks --stack-name "$STACK_NAME-deployment" > /tmp/utm-deployment.json
