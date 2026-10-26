@@ -14,7 +14,7 @@ n            → `self._betrayals`
 θ            → `theta` (initial trust / baseline)
 
 The only Iterated-Prisoner-Dilemma (IPD) glue is:
-    * `_REWARD_TABLE`
+    * `IPD_REWARD_MATRIX_DEFAULTS` and the effective reward mapping
     * `payoff_to_signed_reward`
     * `observe_moves`
 If you port UTM to another domain, replace those three bits with a
@@ -22,13 +22,11 @@ domain-specific outcome-to-reward mapper.  Everything else is generic UTM.
 
 Notes
 -----
-    * Trust is bounded to the closed interval [0, 1]; negative values
-      (active mistrust) are not represented in this implementation.
-      Empirically we found the 0–1 range sufficient for IPD modelling,
-      but the update rule can be extended to [−1, 1] if required.
-    * Learning rates differ (α⁺ ≠ α⁻) to capture the well-known
-      asymmetry where negative events update trust faster than positive
-      reinforcement.
+    * Trust is bounded to [0, 1] by the defined update rule.
+    * Learning rates and the signed reward mapping are modeling choices.
+      This repository does not provide empirical validation for these defaults.
+    * There is no time decay. Delta multiplies updates through the cumulative
+      count of rewards below current trust.
 
 Author: Ryan Carlisle, 2025 — released under MIT (attribution appreciated).
 """
@@ -36,33 +34,24 @@ Author: Ryan Carlisle, 2025 — released under MIT (attribution appreciated).
 from __future__ import annotations
 
 import logging
+import math
+from contextvars import ContextVar
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Final, Iterator
 
 logger = logging.getLogger(__name__)
 
 # ────────────────────────────────────────────────────────────────────────────
-# Default hyper-parameters (tuned for our baseline IPD experiments)
-# ────────────────────────────────────────────────────────────────────────────
+# Explicit default model parameters; not a demonstrated optimum.
 ALPHA_POS: Final[float] = 0.05  # learning-rate for positive surprises (α⁺)
 ALPHA_NEG: Final[float] = 0.50  # learning-rate for negative surprises (α⁻)
 DELTA: Final[float]     = 0.30  # betrayal ramp-up multiplier (δ)
 
 # ────────────────────────────────────────────────────────────────────────────
-# IPD-specific reward table  (calibrated for UTM experiments)
-#
-# The numeric values are *not* PD payoffs; they are a signed “event
-# reward” R ∈ (−1 … 1] fed to the UTM update rule.  We chose this scale
-# empirically so that:
-#   • mutual cooperation feels maximally positive  (+1.0)
-#   • betrayal feels maximally negative           (−1.0)
-#   • mutual defection registers as a mild penalty (−0.2)
-#   • successfully exploiting an opponent is still positive  (+0.5)
-#
-# This calibration produced stable convergence in our Iterated Prisoner’s
-# Dilemma (IPD) tournaments but can be replaced for other domains.
-# ────────────────────────────────────────────────────────────────────────────
+# Model-specific signed rewards. These do not alter the PD scoring game.
+# Choices are fixed and exported with each run; they are not evidence of fit.
+# In particular DC=+0.5 and DD=-0.2 are assumptions, not universal rewards.
 IPD_REWARD_MATRIX_DEFAULTS: Final[dict[tuple[str, str], float]] = {
     ("C", "C"):  1.0,   # mutual cooperation
     ("D", "C"):  0.5,   # I defected, they cooperated
@@ -70,52 +59,37 @@ IPD_REWARD_MATRIX_DEFAULTS: Final[dict[tuple[str, str], float]] = {
     ("C", "D"): -1.0,   # sucker’s payoff / betrayal
 }
 
-_IPD_REWARD_MATRIX: dict[tuple[str, str], float] = dict(IPD_REWARD_MATRIX_DEFAULTS)
+_REWARD_VALUES: ContextVar[tuple[float, float, float, float]] = ContextVar(
+    "ipd_reward_values", default=(1.0, 0.5, -0.2, -1.0)
+)
+
 
 def get_ipd_reward_values() -> tuple[float, float, float, float]:
-    """Return IPD reward-matrix values as (R_CC, R_DC, R_DD, R_CD).
+    """Effective signed rewards (CC, DC, DD, CD) in the current execution context."""
+    return _REWARD_VALUES.get()
 
-    These values are used only by the public IPD simulations to map
-    cooperate/defect outcomes into the signed UTM event reward.
-    """
-    return (
-        _IPD_REWARD_MATRIX[("C", "C")],
-        _IPD_REWARD_MATRIX[("D", "C")],
-        _IPD_REWARD_MATRIX[("D", "D")],
-        _IPD_REWARD_MATRIX[("C", "D")],
-    )
+
+def _validated_rewards(values) -> tuple[float, float, float, float]:
+    values = tuple(float(v) for v in values)
+    if any(not math.isfinite(v) or v == 0 for v in values):
+        raise ValueError("Signed trust rewards must be finite and nonzero.")
+    return values
+
 
 def set_ipd_reward_values(r_cc: float, r_dc: float, r_dd: float, r_cd: float) -> None:
-    """Update the IPD simulation reward matrix used by payoff_to_signed_reward().
+    """Set an explicit reward mapping in this context, without changing PD payoffs."""
+    _REWARD_VALUES.set(_validated_rewards((r_cc, r_dc, r_dd, r_cd)))
 
-    This helper is for academic IPD payoff/reward-matrix experiments only.
-    """
-    global _IPD_REWARD_MATRIX
-
-    def _nz(x: float, eps: float = 1e-6) -> float:
-        return x if x != 0.0 else eps
-
-    _IPD_REWARD_MATRIX = {
-        ("C", "C"): _nz(r_cc),
-        ("D", "C"): _nz(r_dc),
-        ("D", "D"): _nz(r_dd),
-        ("C", "D"): _nz(r_cd),
-    }
 
 @contextmanager
-def temporary_ipd_reward_values(
-    r_cc: float,
-    r_dc: float,
-    r_dd: float,
-    r_cd: float,
-) -> Iterator[None]:
-    """Temporarily override the IPD reward matrix for one local sweep run."""
-    previous = get_ipd_reward_values()
-    set_ipd_reward_values(r_cc, r_dc, r_dd, r_cd)
+def temporary_ipd_reward_values(r_cc: float, r_dc: float, r_dd: float, r_cd: float) -> Iterator[None]:
+    """Isolate one experiment's mapping and restore it even on failure."""
+    token = _REWARD_VALUES.set(_validated_rewards((r_cc, r_dc, r_dd, r_cd)))
     try:
         yield
     finally:
-        set_ipd_reward_values(*previous)
+        _REWARD_VALUES.reset(token)
+
 
 # ────────────────────────────────────────────────────────────────────────────
 # Helper: map a raw payoff to the signed reward R used by UTM
@@ -133,7 +107,8 @@ def payoff_to_signed_reward(my_move: str, opp_move: str) -> float:
     Returns
     -------
     float
-        Reward ∈ (−1 … 1], never zero (UTM requires non-zero events).
+        Finite nonzero signed reward from the effective mapping. Custom mappings
+        may extend beyond the default range [-1, 1].
 
     Raises
     ------
@@ -141,7 +116,8 @@ def payoff_to_signed_reward(my_move: str, opp_move: str) -> float:
         If either move is not 'C' or 'D'.
     """
     try:
-        reward = _IPD_REWARD_MATRIX[(str(my_move), str(opp_move))]
+        index = {("C", "C"): 0, ("D", "C"): 1, ("D", "D"): 2, ("C", "D"): 3}[(str(my_move), str(opp_move))]
+        reward = get_ipd_reward_values()[index]
         logger.debug(
             "payoff_to_signed_reward: my=%s, opp=%s → R=%.3f",
             my_move, opp_move, reward
@@ -184,13 +160,18 @@ class TrustMeter:
     alpha_neg: float = ALPHA_NEG
     delta: float = DELTA
 
-    _betrayals: int = 0         # n — number of past betrayals by this partner
-    _trust: float | None = None  # will be initialised to θ in __post_init__
+    _betrayals: int = field(default=0, init=False)
+    _trust: float | None = field(default=None, init=False)
 
     # ------------------------------------------------------------------
     # Lifecycle helpers
     # ------------------------------------------------------------------
     def __post_init__(self) -> None:
+        for name, value in (("theta", self.theta), ("alpha_pos", self.alpha_pos), ("alpha_neg", self.alpha_neg)):
+            if not math.isfinite(value) or not 0 <= value <= 1:
+                raise ValueError(f"{name} must be finite and between 0 and 1.")
+        if not math.isfinite(self.delta) or self.delta < 0:
+            raise ValueError("delta must be finite and nonnegative.")
         self._trust = self.theta
         logger.debug(
             "TrustMeter init: θ=%.3f α⁺=%.3f α⁻=%.3f δ=%.3f",
@@ -211,7 +192,8 @@ class TrustMeter:
         Parameters
         ----------
         reward : float
-            Signed outcome in (−1 … 1], domain-specific.
+            Finite nonzero signed outcome, domain-specific. Defaults are in
+            [-1, 1]; custom mappings may use a different scale.
         severity : float, default 1.0
             Event severity s (UTM spec §2); use <1 for minor events,
             >1 only if your domain defines scaled severities.
@@ -221,18 +203,22 @@ class TrustMeter:
         ValueError
             If reward == 0 (UTM requires non-zero events).
         """
-        if reward == 0:
-            raise ValueError("reward must be non-zero")
+        if not math.isfinite(reward) or reward == 0:
+            raise ValueError("reward must be finite and non-zero")
+        if not math.isfinite(severity) or severity < 0:
+            raise ValueError("severity must be finite and nonnegative")
 
         # Pick α based on “surprise” direction
         alpha = self.alpha_pos if reward > self._trust else self.alpha_neg
 
         # Detect betrayal and bump n
-        if reward < self._trust:
-            self._betrayals += 1
+        betrayals = self._betrayals + int(reward < self._trust)
 
-        factor  = severity * (1 + self._betrayals * self.delta)  # s · (1 + nδ)
+        factor  = severity * (1 + betrayals * self.delta)  # s · (1 + nδ)
         delta_t = alpha * factor * (reward - self._trust)
+        if not math.isfinite(delta_t):
+            raise ValueError("The trust update overflowed; use smaller parameters.")
+        self._betrayals = betrayals
         self._trust = max(0.0, min(1.0, self._trust + delta_t))
 
     # ------------------------------------------------------------------

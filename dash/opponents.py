@@ -38,5 +38,7 @@ def build_extra_opponent(name: str | None, *, noise_wrap: bool = False) -> axl.P
         raise ValueError(f"Unsupported opponent selection. Choose one of: {allowed}.") from exc
 
     if noise_wrap:
-        return axl.Noise(player, noise=0.05)
+        from axelrod.strategy_transformers import NoisyTransformer
+
+        return NoisyTransformer(noise=0.05)(opponents[selected])()
     return player

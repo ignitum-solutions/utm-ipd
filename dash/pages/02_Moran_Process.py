@@ -104,7 +104,7 @@ if st.button("Run Moran", key="moran_run"):
         cfg["delta"],
         cfg["threshold"],
     )
-    population = [utm_player] + [axl.Cooperator()] * (pop_size - 1)
+    population = [utm_player] + [axl.Cooperator() for _ in range(pop_size - 1)]
 
     logger.info(
         "Moran config → players=%s | pop=%d | generations=%d | turns=%d",
@@ -115,27 +115,20 @@ if st.button("Run Moran", key="moran_run"):
     )
 
     # ── 2. Run process ──────────────────────────────────────────────────
-    mp = axl.MoranProcess(population, turns=200)
-
-    try:                       # Axelrod ≥ 5 returns a DataFrame
-        counts = mp.play(n=generations)
-    except TypeError:          # Older versions run to fixation and return list
-        mp.play()
-        counts = mp.populations
-
-    # ── 3. Extract UTM share per generation ─────────────────────────────
-    if isinstance(counts, pd.DataFrame):
-        df = counts.cumsum()                        # cumulative birth events
-        utm_col = next(c for c in df.columns if str(c).startswith("UTM-"))
-        share = df[utm_col] / pop_size
-        gens = df.index
-    else:                                           # list-of-lists fallback
-        utm_counts = [
-            sum(getattr(p, "name", p).startswith("UTM-") for p in pop)
-            for pop in counts
-        ]
-        share = np.array(utm_counts) / pop_size
-        gens = range(len(share))
+    mp = axl.MoranProcess(population, turns=200, seed=int(cfg["seed"]),
+                          game=axl.Game(r=3, s=0, t=5, p=1))
+    label = str(utm_player)
+    values = [1 / pop_size]
+    for _ in range(int(generations)):
+        try:
+            next(mp)
+        except StopIteration:
+            break
+        values.append(mp.populations[-1].get(label, 0) / pop_size)
+        if values[-1] in (0, 1):
+            break
+    share = np.asarray(values)
+    gens = range(len(share))
 
     # ── 4. Summary metrics ──────────────────────────────────────────────
     final_share = float(share[-1] if isinstance(share, np.ndarray) else share.iloc[-1])

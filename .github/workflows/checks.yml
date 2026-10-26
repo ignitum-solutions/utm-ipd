@@ -1,0 +1,39 @@
+name: Research playground checks
+on:
+  pull_request:
+  push:
+    branches: [main, feat/serverless-react-migration]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: pip install poetry==2.2.1 cfn-lint
+      - run: poetry install
+      - run: npm --prefix frontend ci
+      - run: poetry run pytest -q
+      - run: npm --prefix frontend test
+      - run: npm --prefix frontend run build
+      - run: cfn-lint infra/*.yaml
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: npm run test:browser
+        working-directory: frontend
+  lambda-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the deployment image
+        run: docker build --platform linux/amd64 --tag utm-ipd-lambda:check --file Dockerfile.lambda .
+      - name: Verify packaged simulations and streamed responses
+        run: bash scripts/check_lambda_image.sh utm-ipd-lambda:check "$GITHUB_SHA"

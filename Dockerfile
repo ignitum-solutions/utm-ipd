@@ -13,13 +13,14 @@ WORKDIR /app
 
 # 1-a  install *dependencies only*  (no source yet: cache-friendly)
 COPY pyproject.toml poetry.lock* ./
-RUN poetry install --without dev --no-root --no-interaction \
+RUN poetry install --with research --without dev --no-root --no-interaction \
     && rm -rf $POETRY_CACHE_DIR
 
 # 1-b  copy source and install our own package
 COPY utm       ./utm
 COPY strategies ./strategies
 COPY tournaments ./tournaments
+COPY backend ./backend
 RUN poetry install --only-root --no-interaction
 
 ###############################################################################

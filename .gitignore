@@ -175,3 +175,15 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 utm-ipd-scrub/
+
+# React workspace and local browser verification
+node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+.local-runtime/
+.aws-sam/
+
+# Private working notes and locally exported observations
+/.local-notes/
+/observations/

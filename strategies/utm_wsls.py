@@ -1,21 +1,7 @@
-"""
-utm_wsls.py
-~~~~~~~~~~~
+"""Trust-gated Axelrod Win-Stay-Lose-Shift with actual played history.
 
-A **Win-Stay-Lose-Shift (WSLS)** strategy wrapped by the **Universal Trust
-Model (UTM)** for Axelrod-Py tournaments.
-
-*Author :* **Ryan Carlisle** — Ignitum Solutions, 2025
-*License:* MIT (attribution appreciated)
-
-Concept
--------
-The inner WSLS repeats its previous move after a win (mutual C or T) and
-switches after a loss.  The surrounding Trust *Model* tracks cumulative
-behaviour; when trust < τ the agent defects regardless of WSLS advice, guarding
-against exploitative opponents.
-
-(Only comments / doc-strings were altered; functional code is untouched.)
+The inner rule proposes C after CC/DD and D after CD/DC. Trust below the
+configured threshold overrides that proposal with D. No superiority is assumed.
 """
 
 from __future__ import annotations
@@ -24,17 +10,13 @@ import logging
 import axelrod as axl
 from axelrod.action import Action
 from utm.trust_meter import TrustMeter, payoff_to_signed_reward
+from strategies.delegation import proposal, validate_threshold
 
 logger = logging.getLogger(__name__)
 
 
 class UTMWSLS(axl.Player):
-    """Win-Stay-Lose-Shift governed by a Universal Trust Meter (UTM).
-
-    The inner WSLS engine cooperates on mutual C and repeats D only
-    after a loss.  The outer TrustMeter decides whether we allow the
-    inner engine to act or force defection until trust recovers.
-    """
+    """WSLS with a trust gate; actual actions inform subsequent decisions."""
 
     name = "UTM-WSLS"
 
@@ -58,6 +40,7 @@ class UTMWSLS(axl.Player):
         threshold: float = 0.45,
     ):
         super().__init__()
+        validate_threshold(threshold)
         self.trust = TrustMeter(theta, alpha_pos, alpha_neg, delta)
         self.threshold = threshold
         self.inner: axl.Player = axl.WinStayLoseShift()
@@ -76,7 +59,7 @@ class UTMWSLS(axl.Player):
             self.trust.observe(reward)
 
         # Inner engine’s suggestion
-        proposed = self.inner.strategy(opponent)
+        proposed = proposal(self.inner, self, opponent)
         # Gate through trust threshold
         return Action.D if self.trust.value < self.threshold else proposed
 

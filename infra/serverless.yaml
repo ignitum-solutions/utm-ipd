@@ -1,0 +1,227 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: UTM research interface - static React and direct streaming Python simulations
+
+Parameters:
+  BuildRevision:
+    Type: String
+    Default: unrecorded
+    Description: Source revision used for this Lambda image
+  DomainName:
+    Type: String
+    Default: ''
+    Description: Optional hostname, after validation at the CloudFront address
+  CertificateArn:
+    Type: String
+    Default: ''
+    Description: Existing ACM certificate in us-east-1, required with DomainName
+  MaxRunSeconds:
+    Type: Number
+    Default: 240
+    MinValue: 1
+    MaxValue: 840
+  ConcurrentRuns:
+    Type: Number
+    Default: 2
+    MinValue: 1
+    MaxValue: 10
+
+Conditions:
+  CustomDomain: !And
+    - !Not [!Equals [!Ref DomainName, '']]
+    - !Not [!Equals [!Ref CertificateArn, '']]
+
+Rules:
+  DomainAndCertificate:
+    Assertions:
+      - Assert: !Or
+          - !And
+            - !Equals [!Ref DomainName, '']
+            - !Equals [!Ref CertificateArn, '']
+          - !And
+            - !Not [!Equals [!Ref DomainName, '']]
+            - !Not [!Equals [!Ref CertificateArn, '']]
+        AssertDescription: DomainName and CertificateArn must be supplied together.
+
+Resources:
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireSuggestions
+            Prefix: submissions/
+            Status: Enabled
+            ExpirationInDays: 180
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 180
+          - Id: ExpireOldAssetVersions
+            Prefix: site/
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+
+  Simulation:
+    Type: AWS::Serverless::Function
+    Metadata:
+      Dockerfile: Dockerfile.lambda
+      DockerContext: ..
+      DockerTag: research
+    Properties:
+      PackageType: Image
+      Architectures: [x86_64]
+      MemorySize: 2048
+      Timeout: 900
+      ReservedConcurrentExecutions: !Ref ConcurrentRuns
+      FunctionUrlConfig:
+        AuthType: AWS_IAM
+        InvokeMode: RESPONSE_STREAM
+      Environment:
+        Variables:
+          MAX_RUN_SECONDS: !Ref MaxRunSeconds
+          GIT_SHA: !Ref BuildRevision
+          SUBMIT_PREFIX: !Sub 's3://${SiteBucket}/submissions/'
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: s3:PutObject
+              Resource: !Sub '${SiteBucket.Arn}/submissions/*'
+
+  SimulationLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${Simulation}'
+      RetentionInDays: 7
+
+  AssetAccess:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${AWS::StackName}-assets'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  FunctionAccess:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${AWS::StackName}-simulation'
+        OriginAccessControlOriginType: lambda
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: UTM research interface
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: PriceClass_100
+        Aliases: !If [CustomDomain, [!Ref DomainName], !Ref 'AWS::NoValue']
+        ViewerCertificate: !If
+          - CustomDomain
+          - AcmCertificateArn: !Ref CertificateArn
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
+        Origins:
+          - Id: assets
+            DomainName: !GetAtt SiteBucket.RegionalDomainName
+            OriginPath: /site
+            OriginAccessControlId: !GetAtt AssetAccess.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+          - Id: simulation
+            DomainName: !Select [2, !Split ['/', !GetAtt SimulationUrl.FunctionUrl]]
+            OriginAccessControlId: !GetAtt FunctionAccess.Id
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
+              OriginReadTimeout: 60
+        DefaultCacheBehavior:
+          TargetOriginId: assets
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          # Managed CachingOptimized. API responses use their own behavior.
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          AllowedMethods: [GET, HEAD]
+        CacheBehaviors:
+          - PathPattern: /api/*
+            TargetOriginId: simulation
+            ViewerProtocolPolicy: https-only
+            Compress: false
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+            CachedMethods: [GET, HEAD]
+            # Managed CachingDisabled and AllViewerExceptHostHeader.
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+
+  SiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${SiteBucket.Arn}/site/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}'
+          - Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource: [!GetAtt SiteBucket.Arn, !Sub '${SiteBucket.Arn}/*']
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  CloudFrontInvokeUrl:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Simulation
+      Action: lambda:InvokeFunctionUrl
+      Principal: cloudfront.amazonaws.com
+      SourceArn: !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}'
+      FunctionUrlAuthType: AWS_IAM
+
+  CloudFrontInvoke:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Simulation
+      Action: lambda:InvokeFunction
+      Principal: cloudfront.amazonaws.com
+      SourceArn: !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}'
+      InvokedViaFunctionUrl: true
+
+Outputs:
+  WebsiteUrl:
+    Value: !Sub 'https://${Distribution.DomainName}'
+  WebsiteBucket:
+    Value: !Ref SiteBucket
+  DistributionId:
+    Value: !Ref Distribution
+  ProtectedFunctionUrl:
+    Description: Direct unsigned requests must return 403
+    Value: !GetAtt SimulationUrl.FunctionUrl

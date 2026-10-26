@@ -65,7 +65,7 @@ def build_approved_player(name: str):
         ) from exc
 
 
-if __name__ == "__main__":
+def cli():
     # ----------------------------------------
     # 1) Configure logging before anything else
     # ----------------------------------------
@@ -79,6 +79,9 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--rounds", type=int, default=200)
     p.add_argument("--reps",   type=int, default=30)
+    p.add_argument("--seed", type=int, default=42, help="Axelrod master seed; retain player order when reproducing")
+    p.add_argument("--noise", type=float, default=0, help="Action-flip probability applied equally to both sides of every match")
+    p.add_argument("--csv-dir", default=None, help="Retain full move-by-move match CSVs in this directory")
     p.add_argument(
         "--players",
         nargs="*",
@@ -116,5 +119,11 @@ if __name__ == "__main__":
         args.rounds,
         args.reps,
     )
-    run_tournament(player_objs, turns=args.rounds, repetitions=args.reps)
+    logger.info("Seed=%s | noise=%s | raw CSV directory=%s", args.seed, args.noise, args.csv_dir)
+    run_tournament(player_objs, turns=args.rounds, repetitions=args.reps,
+                   seed=args.seed, noise=args.noise, csv_dir=args.csv_dir)
     logger.info("Tournament completed")
+
+
+if __name__ == "__main__":
+    cli()

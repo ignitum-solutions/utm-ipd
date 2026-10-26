@@ -1,0 +1,35 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Website alias target in an existing public hosted zone
+Parameters:
+  DomainName:
+    Type: String
+  HostedZoneId:
+    Type: AWS::Route53::HostedZone::Id
+  TargetDNSName:
+    Type: String
+  TargetHostedZoneId:
+    Type: String
+    Default: Z2FDTNDATAQYW2
+  EvaluateTargetHealth:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+Conditions:
+  HealthChecks: !Equals [!Ref EvaluateTargetHealth, 'true']
+Resources:
+  WebsiteRecord:
+    Type: AWS::Route53::RecordSetGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      RecordSets:
+        - Name: !Ref DomainName
+          Type: A
+          AliasTarget:
+            DNSName: !Ref TargetDNSName
+            HostedZoneId: !Ref TargetHostedZoneId
+            EvaluateTargetHealth: !If [HealthChecks, true, false]
+Outputs:
+  WebsiteUrl:
+    Value: !Sub 'https://${DomainName}'
