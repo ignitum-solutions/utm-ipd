@@ -60,7 +60,7 @@ export const RESEARCH: Record<
   guide: {
     title: "Universal Trust Model",
     question:
-      "Definitions, update rules, and experimental assumptions used in this research interface.",
+      "Trust updates and decision policies in the Iterated Prisoner's Dilemma (IPD), their relationship to Rescorla-Wagner learning, and the scope of the simulation evidence.",
     design: "",
     measures: "",
     assumptions: "",

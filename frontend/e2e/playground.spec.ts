@@ -1,23 +1,157 @@
 import { test, expect } from "@playwright/test";
 
-test("renders the model guide equations with the math renderer", async ({
-  page,
-}) => {
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto("/");
-  await page.getByRole("button", { name: /05 The Model/ }).click();
-  const guide = page.locator(".reading");
-  await expect(
-    guide.getByRole("heading", {
-      name: "Trust update implemented in this repository",
-    }),
-  ).toBeVisible();
-  await expect(guide.locator(".katex-display")).toHaveCount(3);
-  await expect(guide.locator(".katex-error")).toHaveCount(0);
-  await expect(guide.locator("math").first()).toBeAttached();
-  expect(errors).toEqual([]);
-});
+for (const width of [1440, 390]) {
+  test(`Model guide: IPD scope, learning comparison, equations, and references at ${width}px`, async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    await page.getByRole("button", { name: /The Model/ }).click();
+    const guide = page.getByRole("article");
+    await expect(
+      guide.getByRole("heading", {
+        name: "Rescorla-Wagner and delta learning",
+      }),
+    ).toBeVisible();
+    await expect(guide.locator(":scope > p").first()).toContainText(
+      "Iterated Prisoner's Dilemma (IPD)",
+    );
+    await expect(guide.locator(":scope > p").first()).toContainText(
+      "additional exploratory",
+    );
+    await expect(guide.locator(":scope > p").nth(1)).toContainText(
+      "do not establish prediction of human trust",
+    );
+    await expect(guide.locator(":scope > p").nth(1)).toContainText(
+      "trust-risk separation",
+    );
+    await expect(page.locator(".hero")).toContainText("Rescorla-Wagner");
+
+    const comparison = guide.getByRole("table").filter({
+      has: page.getByRole("columnheader", {
+        name: "Single-cue fixed-rate learner",
+      }),
+    });
+    for (const quantity of [
+      "Current value",
+      "Target outcome",
+      "Prediction error",
+      "Update strength",
+    ]) {
+      await expect(
+        comparison.getByRole("cell", { name: quantity, exact: true }),
+      ).toBeVisible();
+    }
+    await expect(
+      comparison.getByRole("columnheader", { name: "Implemented UTM" }),
+    ).toBeVisible();
+    await expect(
+      guide.getByText(/does not implement this complete multi-cue model/),
+    ).toBeVisible();
+
+    await expect(guide.locator(".katex-error")).toHaveCount(0);
+    const equations = await guide
+      .locator('.katex-display annotation[encoding="application/x-tex"]')
+      .allTextContents();
+    expect(
+      equations.some(
+        (tex) => tex.includes("V_{t+1}") && tex.includes("\\lambda_t - V_t"),
+      ),
+    ).toBe(true);
+    expect(
+      equations.some(
+        (tex) =>
+          tex.includes("T_{t+1}") &&
+          tex.includes("\\operatorname{clip}_{[0,1]}"),
+      ),
+    ).toBe(true);
+    expect(
+      equations.some(
+        (tex) => tex.includes("k_t =") && tex.includes("n_{t+1}\\delta"),
+      ),
+    ).toBe(true);
+    expect(
+      equations.some(
+        (tex) => tex.includes("n_{t+1} = n_t +") && tex.includes("R_t < T_t"),
+      ),
+    ).toBe(true);
+    await expect(guide.locator("math").first()).toBeAttached();
+
+    const headings = await guide
+      .getByRole("heading", { level: 2 })
+      .allTextContents();
+    const core = headings.indexOf("IPD rewards and tournament results");
+    const auxiliary = headings.indexOf("Additional exploratory experiments");
+    expect(core).toBeGreaterThanOrEqual(0);
+    expect(auxiliary).toBeGreaterThan(core);
+    for (const name of [
+      "Investment / Trust Game",
+      "Moran process",
+      "Local parameter sweeps",
+    ]) {
+      await expect(
+        guide.getByRole("heading", { name, exact: true }),
+      ).toBeVisible();
+    }
+    await expect(
+      guide.getByText(/recovery without fresh partner evidence/),
+    ).toBeVisible();
+    await expect(
+      guide.getByText(/Severity zero is not a missing-observation/),
+    ).toBeVisible();
+    await expect(
+      guide.getByText(
+        /software and mechanism checks, rather than empirical validation/,
+      ),
+    ).toBeVisible();
+    const references = guide.locator("ul").last();
+    await expect(references).toContainText(
+      "Rescorla, R. A., and Wagner, A. R. (1972)",
+    );
+    await expect(references).toContainText(
+      "Wilson, R. C., and Collins, A. G. E. (2019)",
+    );
+    await expect(
+      references.getByRole("link", { name: "Chapter PDF" }),
+    ).toHaveAttribute(
+      "href",
+      "https://www.columbia.edu/~rk566/Session4/Theory%20of%20Pavlovian%20Conditioning.pdf",
+    );
+    await expect(
+      references.getByRole("link", { name: "Article", exact: true }),
+    ).toHaveAttribute("href", "https://doi.org/10.7554/eLife.49547");
+
+    // Check visible guide prose, excluding mathematical content and other tools.
+    const prose = await guide.evaluate((element) => {
+      const copy = element.cloneNode(true) as HTMLElement;
+      copy.querySelectorAll(".katex, math").forEach((node) => node.remove());
+      return copy.textContent ?? "";
+    });
+    const modelProse = `${await page.locator(".hero").innerText()} ${prose}`;
+    expect(modelProse).not.toContain("\u2014");
+    expect(modelProse).not.toMatch(/Rescorla[–—]Wagner/);
+
+    for (const table of await guide.getByRole("table").all()) {
+      const lastHeader = table.getByRole("columnheader").last();
+      await lastHeader.scrollIntoViewIfNeeded();
+      const readable = await lastHeader.evaluate((cell) => {
+        const scroller = cell.closest(".table-scroll")!;
+        const outer = scroller.getBoundingClientRect();
+        const inner = cell.getBoundingClientRect();
+        return scroller.clientWidth > 0 && inner.right <= outer.right + 1;
+      });
+      expect(readable).toBe(true);
+    }
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth + 1,
+      ),
+    ).toBe(true);
+    expect(errors).toEqual([]);
+  });
+}
 
 test("runs a seeded Trust Game through the local Python service and downloads results", async ({
   page,
