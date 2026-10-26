@@ -38,9 +38,15 @@ def worker(connection, kind: str, config: dict, presets: dict | None, seconds: f
         last_progress = now
 
     try:
-        # Heavy libraries load in the child; the HTTP loop can heartbeat meanwhile.
-        from backend.engine import simulate
-        result = simulate(kind, config, emit, checkpoint, presets)
+        # Scientific libraries load only for the experiments that use them.
+        # The HTTP loop can heartbeat while a worker initializes those libraries.
+        if kind == "trust":
+            from backend.models import TrustRequest
+            from backend.trust_game import trust_game
+            result = trust_game(TrustRequest(**config), emit, checkpoint)
+        else:
+            from backend.engine import simulate
+            result = simulate(kind, config, emit, checkpoint, presets)
         result["metadata"]["execution_limits"] = {"wall_clock_seconds": seconds, "completion": "full requested run or explicit error; no partial score substitution"}
         checkpoint()
         connection.send_bytes(encode({"type": "result", "result": result}))

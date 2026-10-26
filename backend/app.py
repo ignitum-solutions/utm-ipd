@@ -42,7 +42,7 @@ def health():
 
 @app.get("/api/catalogue")
 def catalogue():
-    from backend.engine import catalogue as describe
+    from backend.catalogue import catalogue as describe
     return {**describe(), "max_run_seconds": RUN_SECONDS}
 
 
@@ -95,10 +95,10 @@ async def launch(kind, config, presets=None):
 
 @app.post("/api/run/tournament")
 async def run_tournament(config: TournamentRequest):
-    from backend.engine import load_presets, validate_selections
+    from backend.catalogue import load_presets, validate_selections
     presets = await asyncio.to_thread(load_presets)
     try:
-        validate_selections(config, presets)
+        await asyncio.to_thread(validate_selections, config, presets)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     return await launch("tournament", config, presets)

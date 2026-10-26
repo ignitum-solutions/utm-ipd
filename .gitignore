@@ -187,3 +187,4 @@ frontend/playwright-report/
 # Private working notes and locally exported observations
 /.local-notes/
 /observations/
+/config/catalogue.json

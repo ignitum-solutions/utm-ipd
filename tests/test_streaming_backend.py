@@ -132,3 +132,46 @@ def test_closing_a_local_stream_cleans_up_request_process():
     asyncio.run(run())
     assert closed == [True]
     assert {p.pid for p in multiprocessing.active_children()} == children
+
+
+def test_built_catalogue_and_trust_game_do_not_import_the_scientific_engine(tmp_path):
+    import os
+    import subprocess
+    import sys
+    from backend.catalogue import write_registry
+    registry = tmp_path / "catalogue.json"
+    write_registry(registry)
+    # A fresh interpreter prevents imports elsewhere in the suite from masking
+    # accidental engine imports on the metadata or validation request paths.
+    source = '''
+import sys
+sys.modules['axelrod'] = None
+sys.modules['backend.engine'] = None
+from fastapi.testclient import TestClient
+from fastapi.responses import JSONResponse
+import backend.app as api
+from backend.models import TrustRequest
+from backend.trust_game import trust_game
+async def launch(kind, config, presets=None):
+    return JSONResponse({'kind':kind})
+api.launch = launch
+with TestClient(api.app) as client:
+    assert 'Defector' in client.get('/api/catalogue').json()['opponents']
+    assert client.post('/api/run/tournament', json={'opponents':['Defector']}).json() == {'kind':'tournament'}
+    assert client.post('/api/run/tournament', json={'opponents':['os.system']}).status_code == 422
+result = trust_game(TrustRequest(rounds=3), lambda _:None, lambda:None)
+assert len(result['series']) == 3
+'''
+    subprocess.run([sys.executable, "-c", source], env={**os.environ, "UTM_CATALOGUE_PATH": str(registry)},
+                   check=True, capture_output=True, text=True, timeout=30)
+
+
+def test_generated_catalogue_matches_the_installed_strategy_registry(tmp_path):
+    from backend.catalogue import write_registry
+    from backend.engine import REGISTRY, STRATEGIES
+    from dash.opponents import extra_opponent_options
+    target = tmp_path / "catalogue.json"
+    write_registry(target)
+    saved = json.loads(target.read_text())
+    assert saved == {"variants": list(REGISTRY), "opponents": sorted(STRATEGIES),
+                     "extra_opponents": extra_opponent_options()}
