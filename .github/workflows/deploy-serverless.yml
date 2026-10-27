@@ -74,6 +74,13 @@ jobs:
         timeout-minutes: 5
       - run: npm run test:browser
         working-directory: frontend
+      - name: Mask build identity metadata
+        env:
+          ROLE_ARN: ${{ secrets.SERVERLESS_BUILD_ROLE_ARN }}
+          ROLE_ID: ${{ secrets.SERVERLESS_BUILD_ROLE_ID }}
+        run: |
+          [[ -n "$ROLE_ARN" && -n "$ROLE_ID" ]] || { echo 'Configure the build role ARN and role ID secrets.' >&2; exit 1; }
+          printf '::add-mask::%s\n' "${ROLE_ARN##*/}" "$ROLE_ID"
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.SERVERLESS_BUILD_ROLE_ARN }}
@@ -92,6 +99,13 @@ jobs:
           sam build --template-file infra/serverless.yaml
           image=$(poetry run python -c 'import yaml; print(yaml.load(open(".aws-sam/build/template.yaml"), Loader=yaml.BaseLoader)["Resources"]["Simulation"]["Properties"]["ImageUri"])')
           bash scripts/check_lambda_image.sh "$image" "$RELEASE_SHA"
+      - name: Mask deployment identity metadata
+        env:
+          ROLE_ARN: ${{ secrets.SERVERLESS_AWS_ROLE_ARN }}
+          ROLE_ID: ${{ secrets.SERVERLESS_AWS_ROLE_ID }}
+        run: |
+          [[ -n "$ROLE_ARN" && -n "$ROLE_ID" ]] || { echo 'Configure the deployment role ARN and role ID secrets.' >&2; exit 1; }
+          printf '::add-mask::%s\n' "${ROLE_ARN##*/}" "$ROLE_ID"
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.SERVERLESS_AWS_ROLE_ARN }}

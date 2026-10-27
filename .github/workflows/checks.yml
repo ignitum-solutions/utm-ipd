@@ -41,6 +41,13 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+      - name: Mask build identity metadata
+        env:
+          ROLE_ARN: ${{ secrets.SERVERLESS_BUILD_ROLE_ARN }}
+          ROLE_ID: ${{ secrets.SERVERLESS_BUILD_ROLE_ID }}
+        run: |
+          [[ -n "$ROLE_ARN" && -n "$ROLE_ID" ]] || { echo 'Configure the build role ARN and role ID secrets.' >&2; exit 1; }
+          printf '::add-mask::%s\n' "${ROLE_ARN##*/}" "$ROLE_ID"
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.SERVERLESS_BUILD_ROLE_ARN }}

@@ -47,3 +47,25 @@ def test_aws_identity_guard_before_privileged_work(filename, job_name, index, ac
     assert (completed.returncode == 0) is succeeds
     assert '123456789012' not in completed.stdout + completed.stderr
     assert '210987654321' not in completed.stdout + completed.stderr
+
+
+@pytest.mark.parametrize('filename,job_name,index', AUTHENTICATIONS)
+@pytest.mark.parametrize('configured', [True, False])
+def test_role_metadata_is_masked_before_authentication(filename, job_name, index, configured):
+    workflow = yaml.load((WORKFLOWS / filename).read_text(), Loader=yaml.BaseLoader)
+    steps = workflow['jobs'][job_name]['steps']
+    mask = steps[index - 1]
+    assert mask['env']['ROLE_ARN'] == steps[index]['with']['role-to-assume']
+    assert mask['env']['ROLE_ID'].startswith('${{ secrets.')
+    completed = subprocess.run(
+        ['bash', '-e', '-c', mask['run']], capture_output=True, text=True,
+        env={**os.environ, 'ROLE_ARN': 'arn:aws:iam::123456789012:role/SyntheticRole',
+             'ROLE_ID': 'SYNTHETICROLEID' if configured else ''}, timeout=10,
+    )
+    assert (completed.returncode == 0) is configured
+    if configured:
+        assert completed.stdout.splitlines() == [
+            '::add-mask::SyntheticRole', '::add-mask::SYNTHETICROLEID',
+        ]
+    else:
+        assert '123456789012' not in completed.stdout + completed.stderr

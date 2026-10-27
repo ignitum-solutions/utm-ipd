@@ -58,6 +58,13 @@ so deployments verify the target account. The deployment role manages
 application resources and build storage; it cannot change its own trust policy
 or publish website DNS changes.
 
+Store each role's IAM `RoleId` as `SERVERLESS_AWS_ROLE_ID` and
+`SERVERLESS_BUILD_ROLE_ID`, respectively. Obtain it with
+`aws iam get-role --role-name YOUR_ROLE_NAME --query Role.RoleId --output text`.
+The workflows register the role name and ID as masks before the credentials
+action can print derived identity information. Update these secrets if a role
+is recreated. A configured image job stops if identity-mask settings are missing.
+
 Actions logs in a public repository are public. Keep account-specific role
 ARNs in secrets, which GitHub masks in logs. The workflows also mask AWS account
 IDs and the deployment's bucket, registry, distribution, and protected-origin
