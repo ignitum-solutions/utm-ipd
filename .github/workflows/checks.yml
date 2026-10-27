@@ -34,7 +34,7 @@ jobs:
       - run: npm run test:browser
         working-directory: frontend
   lambda-image:
-    if: vars.SERVERLESS_BUILD_ROLE_ARN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: vars.SERVERLESS_BUILD_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -43,9 +43,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.SERVERLESS_BUILD_ROLE_ARN }}
+          role-to-assume: ${{ secrets.SERVERLESS_BUILD_ROLE_ARN }}
           aws-region: us-east-1
-          allowed-account-ids: ${{ secrets.AWS_ACCOUNT_ID }}
+          mask-aws-account-id: true
+      - name: Verify build AWS account
+        env:
+          EXPECTED_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+        run: |
+          actual_account=$(aws sts get-caller-identity --query Account --output text)
+          [[ "$actual_account" == "$EXPECTED_ACCOUNT_ID" ]] || { echo 'AWS account does not match the configured account.' >&2; exit 1; }
       - name: Authenticate the public adapter image pull
         run: aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
       - name: Build the deployment image

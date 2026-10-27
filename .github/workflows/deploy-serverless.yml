@@ -14,10 +14,7 @@ on:
         description: Optional source commit or tag for a release or rollback; empty uses the selected workflow revision
         default: ''
       domain_name:
-        description: Optional custom hostname; leave both domain fields empty to retain the current configuration
-        default: ''
-      certificate_arn:
-        description: Optional issued ACM certificate in us-east-1; required with a hostname
+        description: Optional custom hostname; requires the SERVERLESS_CERTIFICATE_ARN secret. Leave empty to retain the current configuration
         default: ''
 permissions:
   contents: read
@@ -33,7 +30,7 @@ jobs:
       STACK_NAME: ${{ inputs.stack_name }}
       AWS_REGION: ${{ inputs.aws_region }}
       DOMAIN_NAME: ${{ inputs.domain_name }}
-      CERTIFICATE_ARN: ${{ inputs.certificate_arn }}
+      CERTIFICATE_ARN: ${{ inputs.domain_name != '' && secrets.SERVERLESS_CERTIFICATE_ARN || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -45,14 +42,14 @@ jobs:
           echo "VITE_BUILD_REVISION=$revision" >> "$GITHUB_ENV"
       - name: Check deployment configuration
         env:
-          DEPLOY_ROLE: ${{ vars.SERVERLESS_AWS_ROLE_ARN || secrets.SERVERLESS_AWS_ROLE_ARN }}
-          BUILD_ROLE: ${{ vars.SERVERLESS_BUILD_ROLE_ARN }}
+          DEPLOY_ROLE: ${{ secrets.SERVERLESS_AWS_ROLE_ARN }}
+          BUILD_ROLE: ${{ secrets.SERVERLESS_BUILD_ROLE_ARN }}
           ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
         run: |
           [[ "$STACK_NAME" =~ ^[a-z][a-z0-9-]{0,29}$ ]] || { echo 'Use a lowercase stack name of at most 30 characters.' >&2; exit 1; }
           [[ -n "$DEPLOY_ROLE" && -n "$BUILD_ROLE" && "$ACCOUNT_ID" =~ ^[0-9]{12}$ ]] || { echo 'Configure SERVERLESS_AWS_ROLE_ARN, SERVERLESS_BUILD_ROLE_ARN, and AWS_ACCOUNT_ID before deploying.' >&2; exit 1; }
           if [[ -n "$DOMAIN_NAME" || -n "$CERTIFICATE_ARN" ]]; then
-            [[ -n "$DOMAIN_NAME" && "$CERTIFICATE_ARN" =~ ^arn:aws:acm:us-east-1:[0-9]{12}:certificate/ ]] || { echo 'Supply both the hostname and its us-east-1 ACM certificate.' >&2; exit 1; }
+            [[ -n "$DOMAIN_NAME" && "$CERTIFICATE_ARN" =~ ^arn:aws:acm:us-east-1:[0-9]{12}:certificate/ ]] || { echo 'Set SERVERLESS_CERTIFICATE_ARN to an issued us-east-1 ACM certificate when supplying a hostname.' >&2; exit 1; }
           fi
       - uses: actions/setup-python@v5
         with:
@@ -79,9 +76,15 @@ jobs:
         working-directory: frontend
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.SERVERLESS_BUILD_ROLE_ARN }}
+          role-to-assume: ${{ secrets.SERVERLESS_BUILD_ROLE_ARN }}
           aws-region: us-east-1
-          allowed-account-ids: ${{ secrets.AWS_ACCOUNT_ID }}
+          mask-aws-account-id: true
+      - name: Verify build AWS account
+        env:
+          EXPECTED_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+        run: |
+          actual_account=$(aws sts get-caller-identity --query Account --output text)
+          [[ "$actual_account" == "$EXPECTED_ACCOUNT_ID" ]] || { echo 'AWS account does not match the configured account.' >&2; exit 1; }
       - name: Authenticate the public adapter image pull
         run: aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
       - name: Build and verify the Lambda image
@@ -91,14 +94,21 @@ jobs:
           bash scripts/check_lambda_image.sh "$image" "$RELEASE_SHA"
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.SERVERLESS_AWS_ROLE_ARN || secrets.SERVERLESS_AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.SERVERLESS_AWS_ROLE_ARN }}
           aws-region: ${{ inputs.aws_region }}
-          allowed-account-ids: ${{ secrets.AWS_ACCOUNT_ID }}
+          mask-aws-account-id: true
+      - name: Verify deployment AWS account
+        env:
+          EXPECTED_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+        run: |
+          actual_account=$(aws sts get-caller-identity --query Account --output text)
+          [[ "$actual_account" == "$EXPECTED_ACCOUNT_ID" ]] || { echo 'AWS account does not match the configured account.' >&2; exit 1; }
       - name: Deploy application infrastructure
         run: |
           aws cloudformation describe-stacks --stack-name "$STACK_NAME-deployment" > /tmp/utm-deployment.json
           artifact_bucket=$(python -c 'import json; print(next(o["OutputValue"] for o in json.load(open("/tmp/utm-deployment.json"))["Stacks"][0]["Outputs"] if o["OutputKey"] == "ArtifactBucket"))')
           image_repository=$(python -c 'import json; print(next(o["OutputValue"] for o in json.load(open("/tmp/utm-deployment.json"))["Stacks"][0]["Outputs"] if o["OutputKey"] == "ImageRepository"))')
+          printf '::add-mask::%s\n' "$artifact_bucket" "$image_repository"
           parameters=("BuildRevision=$RELEASE_SHA")
           if [[ -n "$DOMAIN_NAME" ]]; then
             parameters+=("DomainName=$DOMAIN_NAME" "CertificateArn=$CERTIFICATE_ARN")
@@ -117,6 +127,8 @@ jobs:
               for name, key in [('SITE_BUCKET', 'WebsiteBucket'), ('DISTRIBUTION_ID', 'DistributionId'), ('SITE_URL', 'WebsiteUrl'), ('FUNCTION_URL', 'ProtectedFunctionUrl')]:
                   value = outputs[key]
                   assert '\n' not in value and '\r' not in value
+                  if name != 'SITE_URL':
+                      print('::add-mask::' + value.replace('%', '%25'))
                   env.write(f'{name}={value}\n')
           PY
           distribution_id=$(python -c 'import json; print(next(o["OutputValue"] for o in json.load(open("/tmp/utm-stack.json"))["Stacks"][0]["Outputs"] if o["OutputKey"] == "DistributionId"))')
