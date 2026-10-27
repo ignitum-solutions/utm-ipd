@@ -46,17 +46,37 @@ aws cloudformation deploy --region us-east-2 --template-file infra/deployment.ya
   --stack-name utm-ipd-serverless-deployment --capabilities CAPABILITY_IAM
 ```
 
-Set the GitHub repository variable `SERVERLESS_AWS_ROLE_ARN` to the bootstrap
-stack's `DeployRoleArn` output. Set `SERVERLESS_BUILD_ROLE_ARN` to its
-`ImagePullRoleArn` output for authenticated CI image downloads. This separate
+Set the GitHub repository secret `SERVERLESS_AWS_ROLE_ARN` to the bootstrap
+stack's `DeployRoleArn` output. Set the secret `SERVERLESS_BUILD_ROLE_ARN` to its
+`ImagePullRoleArn` output for authenticated CI image downloads, and set the
+nonsensitive repository variable `SERVERLESS_BUILD_ENABLED=true`. This separate
 role can obtain public image-pull tokens but cannot access the application,
 deploy resources, or invoke Lambda. Fork pull requests run the Python, frontend,
 and browser checks without AWS credentials; the image job runs for configured
-internal pull requests and `main`. The existing secret form of the deployment
-role setting is also
-accepted. Set `AWS_ACCOUNT_ID` as a repository secret so deployments verify the
-target account. The deployment role manages application resources and build
-storage; it cannot change its own trust policy or publish website DNS changes.
+internal pull requests and `main`. Set `AWS_ACCOUNT_ID` as a repository secret
+so deployments verify the target account. The deployment role manages
+application resources and build storage; it cannot change its own trust policy
+or publish website DNS changes.
+
+Store each role's IAM `RoleId` as `SERVERLESS_AWS_ROLE_ID` and
+`SERVERLESS_BUILD_ROLE_ID`, respectively. Obtain it with
+`aws iam get-role --role-name YOUR_ROLE_NAME --query Role.RoleId --output text`.
+The workflows register the role name and ID as masks before the credentials
+action can print derived identity information. Update these secrets if a role
+is recreated. A configured image job stops if identity-mask settings are missing.
+
+Actions logs in a public repository are public. Keep account-specific role
+ARNs in secrets, which GitHub masks in logs. The workflows also mask AWS account
+IDs and the deployment's bucket, registry, distribution, and protected-origin
+identifiers. The public site URL and source revision remain visible. Do not
+enable debug logging or print credentials. Masking cannot remove data from
+logs of earlier runs; review existing logs separately when changing settings.
+
+For a hostname change through the workflow, store the issued us-east-1 ACM
+certificate ARN as the secret `SERVERLESS_CERTIFICATE_ARN` and supply
+`domain_name` when dispatching. The certificate is not a workflow input because
+inputs are public run metadata. Leaving `domain_name` empty retains the existing
+hostname and certificate, even if the optional certificate secret is configured.
 
 Use the bootstrap outputs `ArtifactBucket` and `ImageRepository` for manual
 deployments:
@@ -110,7 +130,7 @@ aws cloudfront create-invalidation --distribution-id YOUR_DISTRIBUTION --paths '
 
 Keep old hashed assets during rollout so an already-open page can still load
 its release. The manual GitHub deployment workflow performs these steps after
-validation. It needs `SERVERLESS_AWS_ROLE_ARN` as a repository variable or secret
+validation. It needs `SERVERLESS_AWS_ROLE_ARN` as a repository secret
 and an explicit workflow dispatch.
 Set `VITE_BUILD_REVISION=SOURCE_COMMIT` when building manually; the verification
 script checks that the frontend and backend identify the same source revision.
