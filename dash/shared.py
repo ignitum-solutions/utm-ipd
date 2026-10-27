@@ -2,7 +2,7 @@
 """
 dash/shared.py  –  common helpers & sidebar for the Streamlit IPD dashboard.
 
-* Loads preset “personalities” for the Universal Trust Model (UTM).
+* Loads parameter presets for the Universal Trust Model (UTM).
 * Builds the sidebar UI so researchers can tweak UTM hyper-parameters and
   choose opponents for an Iterated Prisoner’s Dilemma tournament.
 
@@ -44,7 +44,7 @@ _LOGO = pathlib.Path(__file__).parent / "static" / "IgnitumSolutions_Logo.png"
 
 def _load_presets() -> dict:
     """
-    Load UTM personality presets from either:
+    Load UTM parameter presets from either:
 
     * local YAML  – default `config/presets.yaml`
     * S3 URI      – set env var  PRESETS_S3_URI="s3://bucket/key.yaml"
@@ -68,24 +68,26 @@ def _load_presets() -> dict:
 
 PRESETS: dict = _load_presets()
 
-def _fmt(x): return "—" if x is None else f"{x:.2f}"
+def _fmt(x): return "Not specified" if x is None else f"{x:.2f}"
 
 def _suggest_preset_expander(page_id: str) -> None:
     """Render suggestion controls inline so no modal survives page changes."""
-    with st.sidebar.expander("Suggest a UTM preset"):
+    with st.sidebar.expander("Suggest a parameter preset"):
         st.info(
+            "Names are illustrative configuration labels, not measured personality types. "
+            "Distinguish untested expectations from observations. "
             "Preset suggestions may be stored for research review if submissions are "
             "enabled. Do not submit confidential, personal, or sensitive information."
         )
         with st.form(f"{page_id}_suggest_preset_form"):
-            name = st.text_input("Name (e.g. Diplomat/Narcissist)", key=f"{page_id}_d_name")
+            name = st.text_input("Preset name", key=f"{page_id}_d_name")
             theta = st.slider("θ", 0.0, 1.0, 0.6, 0.01, key=f"{page_id}_d_theta")
             alpha_pos = st.slider("α⁺", 0.0, 0.5, 0.03, 0.001, key=f"{page_id}_d_ap")
             alpha_neg = st.slider("α⁻", 0.0, 1.0, 0.9, 0.01, key=f"{page_id}_d_an")
             delta = st.slider("δ", 0.0, 1.0, 0.8, 0.01, key=f"{page_id}_d_delta")
             tau = st.slider("τ", 0.05, 1.0, 0.6, 0.01, key=f"{page_id}_d_tau")
             creator = st.text_input("Your name / handle", key=f"{page_id}_d_creator")
-            desc = st.text_area("Research rationale and expected behavior", key=f"{page_id}_d_desc")
+            desc = st.text_area("Parameter rationale and untested expectations", key=f"{page_id}_d_desc")
             submitted = st.form_submit_button("Submit")
 
         if not submitted:
@@ -132,7 +134,12 @@ def sidebar(*, page_id: str = "ipd_tournament", show_tournament_actions: bool = 
     c["theta"] = st.sidebar.slider("θ Initial Trust", 0.0, 1.0, 0.6, 0.01)
     c["alpha_pos"] = st.sidebar.slider("α⁺ Learning Rate (+)", 0.0, 0.5, 0.02, 0.001)
     c["alpha_neg"] = st.sidebar.slider("α⁻ Learning Rate (-)", 0.0, 1.0, 0.675, 0.01)
-    c["delta"] = st.sidebar.slider("δ Betrayal Ramp", 0.0, 1.0, 0.45, 0.01)
+    c["delta"] = st.sidebar.slider(
+        "δ Cumulative update ramp", 0.0, 1.0, 0.45, 0.01,
+        help="Counts rewards below current trust, including the current event. "
+             "Its cumulative multiplier affects updates in both directions. "
+             "The counter is cumulative, not a consecutive-defection counter.",
+    )
     c["threshold"] = st.sidebar.slider("τ Threshold", 0.05, 1.0, 0.5, 0.01)
     c["utm_variant"] = st.sidebar.radio("Inner strategy", list(UTM_REGISTRY.keys()), horizontal=True)
 
@@ -150,18 +157,25 @@ def sidebar(*, page_id: str = "ipd_tournament", show_tournament_actions: bool = 
     ]
     c["selected_names"] = st.sidebar.multiselect("Choose bots", STRATEGY_NAMES, default=default_bots)
 
-    st.sidebar.markdown("#### UTM personality presets")
+    st.sidebar.markdown("#### UTM parameter presets")
+    st.sidebar.caption(
+        "Names are illustrative configuration labels, not measured personality types. "
+        "Presets can use a different variant and parameters from the focal agent. "
+        "Descriptions assume severity 1 and the default IPD reward mapping, "
+        "with the agent's move listed first."
+    )
     preset_selections: list[str] = []
-    with st.sidebar.expander("Select personalities"):
+    with st.sidebar.expander("Select parameter presets"):
         for name, spec in PRESETS.items():
             tip = (
                 f"Creator: {spec.get('creator','Unknown')}\n"
+                f"Variant: {spec.get('variant', c['utm_variant'])}\n"
                 f"{spec.get('description','')}\n\n"
-                f"θ={_fmt(spec.get('theta'))}  "
-                f"α⁺={_fmt(spec.get('alpha_pos'))}  "
-                f"α⁻={_fmt(spec.get('alpha_neg'))}\n"
-                f"δ={_fmt(spec.get('delta'))}  "
-                f"τ={_fmt(spec.get('tau'))}"
+                f"θ={_fmt(spec.get('theta', c['theta']))}  "
+                f"α⁺={_fmt(spec.get('alpha_pos', c['alpha_pos']))}  "
+                f"α⁻={_fmt(spec.get('alpha_neg', c['alpha_neg']))}\n"
+                f"δ={_fmt(spec.get('delta', c['delta']))}  "
+                f"τ={_fmt(spec.get('tau', c['threshold']))}"
             )
             if st.checkbox(name, key=f"preset_{name}", help=tip):
                 preset_selections.append(name)

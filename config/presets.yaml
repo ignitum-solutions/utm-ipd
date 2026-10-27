@@ -1,6 +1,8 @@
 The Diplomat:
   creator: Ryan Carlisle
-  description: Starts out friendly and keeps trusting unless repeatedly betrayed.
+  description: >-
+    TFT with initial trust above its cooperation threshold. From the initial
+    state, one CD reward of −1 clips trust to 0.
   variant: TFT
   theta: 0.65
   alpha_pos: 0.03
@@ -10,7 +12,9 @@ The Diplomat:
 
 The Maverick:
   creator: Ryan Carlisle
-  description: Shifts strategy aggressively; quick to punish but also quick to recover.
+  description: >-
+    WSLS with initial trust 0.45 below its 0.5 cooperation threshold. The trust
+    gate overrides its opening cooperation proposal with defection.
   variant: WSLS
   theta: 0.45
   alpha_pos: 0.03
@@ -20,7 +24,9 @@ The Maverick:
 
 The Guardian:
   creator: Ryan Carlisle
-  description: High baseline trust with a sturdy defense—retaliates only after clear betrayal.
+  description: >-
+    TFT with initial trust 0.7. From that state, a DC reward of +0.5 lowers trust
+    to 0.532, below its 0.6 cooperation threshold.
   variant: TFT
   theta: 0.70
   alpha_pos: 0.02
@@ -30,7 +36,9 @@ The Guardian:
 
 The Opportunist:
   creator: Ryan Carlisle
-  description: Low initial trust but eager to cooperate if it sees quick gains.
+  description: >-
+    WSLS with initial trust 0.3 below its 0.45 cooperation threshold. A DC reward
+    of +0.5 raises trust, but the next decision also depends on played history.
   variant: WSLS
   theta: 0.30
   alpha_pos: 0.04
@@ -40,7 +48,9 @@ The Opportunist:
 
 The Visionary:
   creator: Ryan Carlisle
-  description: Extremely trusting and forgiving, banking on long-term reciprocity.
+  description: >-
+    TFT with initial trust 0.85 above its 0.6 cooperation threshold. From the
+    initial state, one CD reward of −1 clips trust to 0.
   variant: TFT
   theta: 0.85
   alpha_pos: 0.05
@@ -50,7 +60,9 @@ The Visionary:
 
 The Sentinel:
   creator: Ryan Carlisle
-  description: Balanced guardian that switches to WSLS mode after sustained conflict.
+  description: >-
+    The hybrid starts in TFT with trust 0.55 below its 0.65 cooperation threshold,
+    so it initially defects. Promotion to WSLS requires trust strictly above 0.55.
   variant: TFT→WSLS
   theta: 0.55
   alpha_pos: 0.02
@@ -60,7 +72,9 @@ The Sentinel:
 
 The Altruist:
   creator: Ryan Carlisle
-  description: Maximal goodwill—keeps cooperating even under moderate betrayal.
+  description: >-
+    TFT with initial trust 0.9. From that state, one CD reward of −1 reduces
+    trust to approximately 0.045, below its 0.6 cooperation threshold.
   variant: TFT
   theta: 0.90
   alpha_pos: 0.04
@@ -70,7 +84,9 @@ The Altruist:
 
 The Trickster:
   creator: Ryan Carlisle
-  description: Minimal trust, exploits whenever possible, and rarely forgives.
+  description: >-
+    WSLS with initial trust 0.2 and a cooperation threshold of 0.7. Its opening
+    cooperation proposal is blocked by the trust gate.
   variant: WSLS
   theta: 0.20
   alpha_pos: 0.01

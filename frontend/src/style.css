@@ -320,12 +320,17 @@ fieldset {
   display: block;
   margin: 23px 0;
 }
-.slider-field > span {
+.slider-heading {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 12px;
   color: #c9d0dc;
+}
+.slider-heading label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .slider-field b {
   font-family: Georgia, serif;

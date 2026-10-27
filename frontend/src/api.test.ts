@@ -67,4 +67,7 @@ it("escapes CSV labels and prevents formula injection without altering numeric v
     '"Player","Mean"\r\n"\'=SUM(1,2)","-1"',
   );
   expect(csv([{ Player: 'A "quote"' }])).toContain('"A ""quote"""');
+  expect(csv([{ Player: "User label — α → β", Mean: -1 }])).toContain(
+    '"User label — α → β","-1"',
+  );
 });

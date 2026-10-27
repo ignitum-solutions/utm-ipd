@@ -158,7 +158,7 @@ or operational advice. Do not submit confidential or sensitive information.
 | `frontend/` | Static React + TypeScript research interface |
 | `backend/` | Direct streaming Python HTTP API and simulation services |
 | `utm/`, `strategies/`, `tournaments/` | Reusable model and tournament code |
-| `config/presets.yaml` | Approved research personality presets |
+| `config/presets.yaml` | Illustrative research parameter presets |
 | `scripts/dev.py`, `run_local.sh` | Local launcher |
 | `dash/` | Optional legacy interface, local sweeps, model documentation |
 | `infra/serverless.yaml`, `Dockerfile.lambda` | AWS deployment template and backend packaging |

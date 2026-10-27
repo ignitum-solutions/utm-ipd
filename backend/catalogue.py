@@ -51,7 +51,7 @@ def validate_selections(cfg: TournamentRequest, presets: dict) -> None:
     if any(name not in registry["opponents"] for name in cfg.opponents):
         raise ValueError("Choose opponents from the approved strategy list.")
     if any(name not in presets for name in cfg.presets):
-        raise ValueError("Choose an existing personality preset.")
+        raise ValueError("Choose an existing parameter preset.")
     if cfg.extra_opponent not in registry["extra_opponents"]:
         raise ValueError("Choose an approved extra opponent.")
 

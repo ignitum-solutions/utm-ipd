@@ -256,6 +256,11 @@ in proportion to payoff and replaces a randomly selected agent. The simulation
 stops at fixation, when one type occupies the whole population, or at the
 requested generation limit.
 
+With the default UTM-TFT policy and noiseless cooperative play, the UTM agent
+can act like the resident Cooperators. Equal payoffs remove a payoff advantage;
+population composition can then change through neutral drift, the random
+effect of reproduction and replacement.
+
 Final share 0 means the UTM lineage was lost; final share 1 means UTM fixation.
 An intermediate final share means fixation was not observed within the budget,
 without establishing long-term coexistence. Higher payoff can increase

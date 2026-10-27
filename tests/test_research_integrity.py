@@ -2,14 +2,16 @@
 import csv
 from concurrent.futures import ThreadPoolExecutor
 from fractions import Fraction
+from pathlib import Path
 from threading import Barrier
 
 import axelrod as axl
 import pandas as pd
 import pytest
+import yaml
 
-from backend.engine import tournament, trust_game
-from backend.models import TournamentRequest, TrustRequest
+from backend.engine import player, preset_player, tournament, trust_game
+from backend.models import Parameters, TournamentRequest, TrustRequest
 from strategies.utm_pure import TrustOnlyIPDStrategy
 from strategies.utm_tft import UTMTFT
 from strategies.utm_tft_wsls import UTMTFT_WSLS
@@ -134,11 +136,17 @@ def test_result_records_effective_presets_rules_and_source_version():
 
 
 def test_zero_investment_rule_is_recorded_and_not_labeled_cooperation():
-    result = trust_game(TrustRequest(rounds=3, send=0), lambda _: None, lambda: None)
+    result = trust_game(TrustRequest(rounds=50, send=0), lambda _: None, lambda: None)
     assert result['metadata']['protocol']['no_investment_reward'] == 1
-    assert result['payoffs'] == [0, 0, 0]
+    assert result['payoffs'] == [0] * 50
+    assert result['cumulative'] == [0] * 50
+    assert result['investments'] == [0] * 50
     assert result['summary']['Investment fraction'] == 0
     assert result['summary']['Nonnegative payoff fraction'] == 1
+    # Fifty reward-1 updates: T_50 = 1 - (1/2)(19/20)^50.
+    expected = 1 - Fraction(1, 2) * Fraction(19, 20) ** 50
+    assert result['summary']['Final trust'] == pytest.approx(float(expected), rel=0, abs=1e-15)
+    assert not any('cooperation' in key.lower() for key in result['summary'])
 
 
 def test_opponent_registry_uses_axelrods_rule_obeying_set():
@@ -266,3 +274,104 @@ def test_hybrid_promotion_receives_gate_forced_history_and_reset_restores_tft():
     assert isinstance(player.inner, axl.TitForTat)
     assert player.trust.value == .4 and player.trust._betrayals == 0
     assert player.promote_at == .45
+
+
+def shipped_presets():
+    return yaml.safe_load((Path(__file__).resolve().parents[1] / 'config/presets.yaml').read_text())
+
+
+@pytest.mark.parametrize('name,variant,parameters,opening,after_dc,after_cd', [
+    ('The Diplomat', UTMTFT, (.65, .03, .9, .8, .6), axl.Action.C, .407, 0),
+    ('The Maverick', UTMWSLS, (.45, .03, .75, .65, .5), axl.Action.D, .4515, 0),
+    ('The Guardian', UTMTFT, (.7, .02, .6, .4, .6), axl.Action.C, .532, 0),
+    ('The Opportunist', UTMWSLS, (.3, .04, .55, .8, .45), axl.Action.D, .308, 0),
+    ('The Visionary', UTMTFT, (.85, .05, .35, .4, .6), axl.Action.C, .6785, 0),
+    ('The Sentinel', UTMTFT_WSLS, (.55, .02, .7, .25, .65), axl.Action.D, .50625, 0),
+    ('The Altruist', UTMTFT, (.9, .04, .3, .5, .6), axl.Action.C, .72, .045),
+    ('The Trickster', UTMWSLS, (.2, .01, .5, .85, .7), axl.Action.D, .203, 0),
+])
+def test_named_preset_configuration_and_independent_one_event_expectations(
+    name, variant, parameters, opening, after_dc, after_cd
+):
+    """Published parameter configurations and hand-calculated mechanism controls."""
+    spec = shipped_presets()[name]
+    assert spec['creator'] == 'Ryan Carlisle'
+    assert tuple(spec[key] for key in ['theta', 'alpha_pos', 'alpha_neg', 'delta', 'tau']) == parameters
+    assert {'TFT': UTMTFT, 'WSLS': UTMWSLS, 'TFT→WSLS': UTMTFT_WSLS}[spec['variant']] is variant
+    resolved = preset_player(spec, Parameters())
+    assert type(resolved) is variant
+    assert resolved.strategy(axl.Cooperator()) == opening
+    # These are fresh-state DC/CD observations at severity 1, not performance
+    # or personality claims. Expected values do not call the production rule.
+    for moves, expected in [(('D', 'C'), after_dc), (('C', 'D'), after_cd)]:
+        fresh = preset_player(spec, Parameters())
+        fresh.trust.observe_moves(*moves)
+        assert fresh.trust.value == pytest.approx(expected, rel=0, abs=1e-14)
+
+
+def test_shipped_preset_descriptions_are_prose_without_em_dashes():
+    presets = shipped_presets()
+    assert len(presets) == 8
+    for spec in presets.values():
+        assert spec['description'].strip()
+        assert '\u2014' not in spec['description']
+
+
+@pytest.mark.parametrize('turns,expected,counter', [(1, .55, 0), (2, .50625, 1), (3, .4996875, 2)])
+def test_sentinel_noiseless_cooperator_trace_does_not_promote_after_conflict(turns, expected, counter):
+    sentinel = preset_player(shipped_presets()['The Sentinel'], Parameters())
+    trace = axl.Match((sentinel, axl.Cooperator()), turns=turns, seed=42).play()
+    assert trace == [(axl.Action.D, axl.Action.C)] * turns
+    # A policy processes the previous round at its next decision.
+    assert sentinel.trust.value == pytest.approx(expected, rel=0, abs=1e-14)
+    assert sentinel.trust._betrayals == counter
+    assert type(sentinel.inner) is axl.TitForTat
+
+
+def test_incomplete_preset_keeps_focal_fallback_semantics():
+    fallback = Parameters(theta=.8, alpha_pos=.1, alpha_neg=.2, delta=.3,
+                          threshold=.4, variant='WSLS')
+    inherited = preset_player({'theta': .7}, fallback)
+    assert type(inherited) is UTMWSLS
+    assert inherited.init_kwargs == {'theta': .7, 'alpha_pos': .1, 'alpha_neg': .2,
+                                      'delta': .3, 'threshold': .4}
+
+
+def test_bounded_ipd_preset_fixture_resolves_identity_before_checking_payoffs():
+    config = TournamentRequest(
+        variant='Trust-only IPD', theta=.6, alpha_pos=.02, alpha_neg=.675,
+        delta=.45, threshold=.5, opponents=['Cooperator', 'Defector'],
+        presets=['The Diplomat', 'The Sentinel'], rounds=20, repetitions=2,
+        noise_pct=0, seed=42, extra_opponent='None', noise_wrap=False,
+    )
+    result = tournament(config, lambda _: None, lambda: None, shipped_presets())
+    expected_order = ['Trust-only IPD', 'Cooperator', 'Defector', 'UTM-The Diplomat', 'UTM-The Sentinel']
+    resolved = result['metadata']['resolved_players']
+    actual_order = [entry['label'].split(':', 1)[0] for entry in resolved]
+    assert actual_order == expected_order
+    slots = {name: entry['slot'] for name, entry in zip(actual_order, resolved)}
+    for entry in resolved:
+        assert result['players'][entry['slot']] == entry['label']
+    assert resolved[slots['UTM-The Diplomat']]['class'] == 'strategies.utm_tft.UTMTFT'
+    assert resolved[slots['UTM-The Sentinel']]['class'] == 'strategies.utm_tft_wsls.UTMTFT_WSLS'
+    expected = [
+        [3, 3, .95, 3, .95],
+        [3, 3, 0, 3, 0],
+        [1.2, 5, 1, 1.2, 1],
+        [3, 3, .95, 3, .95],
+        [1.2, 5, 1, 1.2, 1],
+    ]
+    for row, name in enumerate(expected_order):
+        observed = [result['payoff_matrix'][slots[name]][slots[opponent]] for opponent in expected_order]
+        assert observed == pytest.approx(expected[row], rel=0, abs=1e-14)
+    for row in result['leaderboard']:
+        assert row['#C'] + row['#D'] == 160
+    sentinel = next(row for row in result['leaderboard'] if row['Player index'] == slots['UTM-The Sentinel'])
+    assert sentinel['#C'] == 0 and sentinel['#D'] == 160 and sentinel['C-rate'] == 0
+
+
+def test_default_tft_policy_cooperative_field_has_no_payoff_advantage():
+    utm = player(Parameters())
+    trace = axl.Match((utm, axl.Cooperator()), turns=20, seed=42).play()
+    assert trace == [(axl.Action.C, axl.Action.C)] * 20
+    assert axl.Game(r=3, s=0, t=5, p=1).score(trace[0]) == (3, 3)
