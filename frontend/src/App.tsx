@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
 import {
   DEFAULT_CONFIG,
   csv,
@@ -83,22 +83,35 @@ function Slider({
   help: string;
   onChange: (n: number) => void;
 }) {
+  const id = useId();
+  const inputId = `slider-${id}`;
+  const helpId = `${inputId}-help`;
   return (
-    <label className="slider-field">
-      <span>
-        <b>{symbol}</b> {label}
-        <output>{value.toFixed(step < 0.01 ? 3 : 2)}</output>
-      </span>
+    <div className="slider-field">
+      <div className="slider-heading">
+        <label htmlFor={inputId}>
+          <b aria-hidden="true">{symbol}</b> {label}
+        </label>
+        <output
+          htmlFor={inputId}
+          aria-label={`${label} current value`}
+          aria-live="off"
+        >
+          {value.toFixed(step < 0.01 ? 3 : 2)}
+        </output>
+      </div>
       <input
+        id={inputId}
         type="range"
+        aria-describedby={helpId}
         min={min}
         max={max}
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
       />
-      <small>{help}</small>
-    </label>
+      <small id={helpId}>{help}</small>
+    </div>
   );
 }
 function Dialog({
@@ -236,7 +249,7 @@ function ResultView({ result }: { result: Result }) {
                             : value.toFixed(3)
                           : key === "Player" && typeof value === "string"
                             ? opponentLabel(value)
-                            : (value ?? "—")}
+                            : (value ?? "Not available")}
                       </td>
                     ))}
                   </tr>
@@ -588,7 +601,13 @@ export default function App() {
         </header>
         <div className="workspace">
           <section className="hero">
-            <p className="eyebrow">UNIVERSAL TRUST MODEL / EXPERIMENTS</p>
+            <p className="eyebrow">
+              {page === "tournament"
+                ? "PRIMARY EXPERIMENT / IPD"
+                : page === "guide"
+                  ? "UNIVERSAL TRUST MODEL / METHODS"
+                  : "EXPLORATORY EXPERIMENT / UTM"}
+            </p>
             <h1>{RESEARCH[page].title}</h1>
             <p>{RESEARCH[page].question}</p>
           </section>
@@ -842,14 +861,18 @@ export default function App() {
                           onChange={(v) => update("alpha_neg", v)}
                         />
                         <Slider
-                          label="Betrayal ramp"
+                          label="Cumulative update ramp"
                           symbol="δ"
                           value={cfg.delta}
-                          help="Cumulative update multiplier after rewards below current trust."
+                          help="Counts rewards below current trust, including the current event. The cumulative multiplier scales current and later updates in both directions. It is not a count of consecutive defections."
                           onChange={(v) => update("delta", v)}
                         />
                         <Slider
-                          label="Cooperation threshold"
+                          label={
+                            page === "trust"
+                              ? "Investment threshold"
+                              : "Cooperation threshold"
+                          }
                           symbol="τ"
                           value={cfg.threshold}
                           min={0.05}
@@ -857,6 +880,10 @@ export default function App() {
                           onChange={(v) => update("threshold", v)}
                         />
                       </fieldset>
+                      <p className="field-note">
+                        Trust is a model state, not a calibrated probability or
+                        a measured human belief.
+                      </p>
                       <button
                         type="button"
                         className="text-button"
@@ -886,41 +913,69 @@ export default function App() {
                               selected={cfg.opponents}
                               onChange={(names) => update("opponents", names)}
                             />
-                            <details className="settings-details">
+                            <details
+                              className="settings-details"
+                              aria-label="UTM parameter presets"
+                            >
                               <summary>
-                                UTM personalities{" "}
+                                UTM parameter presets{" "}
                                 <span>{cfg.presets.length} selected</span>
                               </summary>
+                              <p className="field-note">
+                                Names are illustrative labels for parameter
+                                configurations, not measured human personality
+                                types or validated behavioral classifications.
+                                Each preset can use a different strategy variant
+                                and parameters from the focal agent. Omitted
+                                settings inherit the focal agent's values.
+                                Descriptions use the default IPD reward mapping
+                                and severity 1; C means cooperate and D means
+                                defect, with the agent's move listed first.
+                              </p>
                               <div className="preset-list">
                                 {Object.entries(catalogue?.presets ?? {}).map(
-                                  ([name, preset]) => (
-                                    <label key={name}>
-                                      <input
-                                        type="checkbox"
-                                        checked={cfg.presets.includes(name)}
-                                        onChange={(e) =>
-                                          update(
-                                            "presets",
-                                            e.target.checked
-                                              ? [...cfg.presets, name]
-                                              : cfg.presets.filter(
-                                                  (n) => n !== name,
-                                                ),
-                                          )
-                                        }
-                                      />
-                                      <span>
-                                        <b>{name}</b>
-                                        <small>{preset.description}</small>
-                                        <small>
-                                          {preset.creator} · θ {preset.theta} ·
-                                          α⁺ {preset.alpha_pos} · α⁻{" "}
-                                          {preset.alpha_neg} · δ {preset.delta}{" "}
-                                          · τ {preset.tau}
-                                        </small>
-                                      </span>
-                                    </label>
-                                  ),
+                                  ([name, preset]) => {
+                                    // Only omitted settings inherit focal values.
+                                    const resolved = {
+                                      variant: cfg.variant,
+                                      theta: cfg.theta,
+                                      alpha_pos: cfg.alpha_pos,
+                                      alpha_neg: cfg.alpha_neg,
+                                      delta: cfg.delta,
+                                      tau: cfg.threshold,
+                                      ...preset,
+                                    };
+                                    return (
+                                      <label key={name}>
+                                        <input
+                                          type="checkbox"
+                                          checked={cfg.presets.includes(name)}
+                                          onChange={(e) =>
+                                            update(
+                                              "presets",
+                                              e.target.checked
+                                                ? [...cfg.presets, name]
+                                                : cfg.presets.filter(
+                                                    (n) => n !== name,
+                                                  ),
+                                            )
+                                          }
+                                        />
+                                        <span>
+                                          <b>{name}</b>
+                                          <small>{preset.description}</small>
+                                          <small>
+                                            {preset.creator} · Variant:{" "}
+                                            {resolved.variant} · θ{" "}
+                                            {resolved.theta} · α⁺{" "}
+                                            {resolved.alpha_pos} · α⁻{" "}
+                                            {resolved.alpha_neg} · δ{" "}
+                                            {resolved.delta} · τ {resolved.tau}
+                                          </small>
+                                        </span>
+                                      </label>
+                                    );
+                                  },
                                 )}
                               </div>
                             </details>
@@ -1035,8 +1090,9 @@ export default function App() {
                               An investment is <strong>tripled</strong> before
                               the partner returns a fraction. The net payoff
                               determines the signed trust reward. Zero payoff,
-                              including no investment, is treated as a positive
-                              reward in this experiment.
+                              including no investment, supplies reward +1. This
+                              adapter assumption permits recovery without fresh
+                              partner evidence.
                             </p>
                             <div className="input-grid">
                               <NumberField
@@ -1148,7 +1204,8 @@ export default function App() {
               <p>
                 The legacy sweep interface remains available for
                 reproducibility. Its safeguards limit a sweep to 32
-                combinations, 100 rounds, 5 repetitions, and 10 players.
+                combinations, 100 rounds, 5 repetitions, and 10 players. A
+                60-second execution budget is checked between simulations.
               </p>
               <h3>Reference IPD reward mapping</h3>
               <table>
@@ -1213,6 +1270,10 @@ export default function App() {
               with Axelrod-Python. Code MIT; model documentation CC BY 4.0.
             </p>
             <p>
+              Software checks and reproducible simulations do not establish
+              human behavioral validity.
+            </p>
+            <p>
               For research use. Do not submit confidential or sensitive
               information.
             </p>
@@ -1245,15 +1306,17 @@ export default function App() {
       )}
       {suggesting && (
         <Dialog
-          title="Suggest a personality preset"
+          title="Suggest a parameter preset"
           onClose={() => {
             if (!savingSuggestion) setSuggesting(false);
           }}
         >
           <p>
-            Your current UTM parameters will be included. Suggestions are stored
-            privately for review. Do not include confidential or sensitive
-            information.
+            Your current strategy variant and parameters will be included. Names
+            are illustrative labels, not measured personality types or validated
+            behavioral classifications. Distinguish untested expectations from
+            observations. Suggestions are stored privately for review. Do not
+            include confidential or sensitive information.
           </p>
           <form
             onSubmit={(e) => {
@@ -1270,7 +1333,7 @@ export default function App() {
               <input name="creator" maxLength={80} />
             </label>
             <label className="select-field">
-              Research rationale and expected behavior
+              Parameter rationale and untested expectations
               <textarea name="description" required maxLength={2000} rows={4} />
             </label>
             {suggestMessage && <p role="status">{suggestMessage}</p>}

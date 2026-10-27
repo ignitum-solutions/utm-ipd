@@ -33,7 +33,7 @@ export const RESEARCH: Record<
     measures:
       "UTM population share by generation, final share, mean share over the observed trajectory, and the generation of fixation when reached.",
     assumptions:
-      "Higher payoff increases the probability of reproduction, but random replacement can still eliminate the UTM lineage. A final UTM share of 0 indicates loss; 1 indicates UTM fixation. An intermediate share at the generation limit is an unfinished trajectory, not evidence of a stable population. Repeat across seeds to estimate fixation frequency within the generation limit.",
+      "With the default policy and noiseless cooperative play, agents can receive identical payoffs. Population changes can then reflect neutral drift, random changes without a payoff advantage. A final UTM share of 0 indicates loss; 1 indicates UTM fixation. An intermediate share at the generation limit is an unfinished trajectory, not evidence of a stable population. One trajectory does not estimate fixation probability; repeat across seeds to estimate fixation frequency within the generation limit.",
   },
   trust: {
     title: "Investment / Trust Game",
@@ -44,7 +44,7 @@ export const RESEARCH: Record<
     measures:
       "Trust after each round, cumulative net payoff, the fraction of rounds with an investment, and the fraction with a nonnegative payoff.",
     assumptions:
-      "For a positive investment, returning more than one third of the tripled amount gives a profit; less than one third gives a loss. This implementation supplies reward +1 for nonnegative payoff, including zero when no investment is made, and −1 for a loss. Trust can therefore recover during non-investment rounds. Compare investment fraction with payoff rather than interpreting zero-payoff rounds as cooperation.",
+      "For a positive investment, returning more than one third of the tripled amount gives a profit; less than one third gives a loss. This implementation supplies reward +1 for nonnegative payoff, including zero when no investment is made, and −1 for a loss. This adapter assumption permits recovery without fresh partner evidence during non-investment rounds. Compare investment fraction with payoff rather than interpreting zero-payoff rounds as cooperation.",
   },
   sweeps: {
     title: "Parameter sweeps",
@@ -55,7 +55,7 @@ export const RESEARCH: Record<
     measures:
       "Scores for sampled settings, parameter rankings, and heatmaps of the selected comparison.",
     assumptions:
-      "A high-scoring sampled setting is conditional on the search space and opponent field. Repeat candidate settings across seeds and other fields before drawing a broader conclusion.",
+      "A high-scoring sampled setting is conditional on the search space and opponent field. It does not establish an optimum. Repeat candidate settings across seeds and other fields before generalizing.",
   },
   guide: {
     title: "Universal Trust Model",

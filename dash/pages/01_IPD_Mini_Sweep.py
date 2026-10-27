@@ -152,7 +152,7 @@ def _render_reference_settings(cfg: dict) -> None:
                     ("θ Initial trust", f"{cfg['theta']:.3f}"),
                     ("α⁺ Positive learning", f"{cfg['alpha_pos']:.3f}"),
                     ("α⁻ Negative learning", f"{cfg['alpha_neg']:.3f}"),
-                    ("δ Betrayal ramp", f"{cfg['delta']:.3f}"),
+                    ("δ Cumulative update ramp", f"{cfg['delta']:.3f}"),
                     ("τ Cooperation threshold", f"{cfg['threshold']:.3f}"),
                     ("Inner strategy", cfg["utm_variant"]),
                 ],

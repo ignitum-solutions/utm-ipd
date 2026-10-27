@@ -30,11 +30,11 @@ export type Catalogue = {
     {
       creator?: string;
       description?: string;
-      theta: number;
-      alpha_pos: number;
-      alpha_neg: number;
-      delta: number;
-      tau: number;
+      theta?: number;
+      alpha_pos?: number;
+      alpha_neg?: number;
+      delta?: number;
+      tau?: number;
       variant?: string;
     }
   >;
