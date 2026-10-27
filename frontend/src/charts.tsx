@@ -1,5 +1,6 @@
 import type { Result } from "./api";
 import { opponentLabel } from "./opponents";
+import { ScoreDistribution } from "./score-distribution";
 
 function display(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(3);
@@ -66,23 +67,12 @@ export function LineChart({
   );
 }
 
-function quantile(values: number[], q: number) {
-  const sorted = [...values].sort((a, b) => a - b),
-    position = (sorted.length - 1) * q;
-  const low = Math.floor(position),
-    fraction = position - low;
-  return (
-    sorted[low] + fraction * ((sorted[low + 1] ?? sorted[low]) - sorted[low])
-  );
-}
-
 export function TournamentCharts({ result }: { result: Result }) {
   const rows = result.leaderboard ?? [],
     players = (result.players ?? []).map(opponentLabel),
     scores = result.scores ?? [];
   const payoff = result.payoff_matrix ?? [];
   const maxScore = Math.max(5, ...scores.flat());
-  const scale = (value: number) => 220 + (value / maxScore) * 340;
   return (
     <>
       <div className="chart-grid">
@@ -122,57 +112,7 @@ export function TournamentCharts({ result }: { result: Result }) {
           })}
         </section>
       </div>
-      <section className="chart">
-        <h3>Score distribution</h3>
-        <p className="muted">
-          Minimum, first quartile, median, third quartile, and maximum across
-          repetitions.
-        </p>
-        <svg
-          className="distribution"
-          viewBox={`0 0 600 ${players.length * 30 + 35}`}
-          role="img"
-          aria-label="Score distributions by strategy"
-        >
-          {players.map((name, i) => {
-            const values = scores[i];
-            if (!values?.length) return null;
-            const y = i * 30 + 20;
-            const q = [0, 0.25, 0.5, 0.75, 1].map((p) =>
-              scale(quantile(values, p)),
-            );
-            return (
-              <g key={i}>
-                <text x="5" y={y + 4}>
-                  {name.length > 29 ? name.slice(0, 28) + "…" : name}
-                </text>
-                <line
-                  x1={q[0]}
-                  x2={q[4]}
-                  y1={y}
-                  y2={y}
-                  stroke="var(--accent)"
-                />
-                <rect
-                  x={q[1]}
-                  y={y - 8}
-                  width={Math.max(1, q[3] - q[1])}
-                  height="16"
-                  fill="var(--accent-soft)"
-                  stroke="var(--accent)"
-                />
-                <line
-                  x1={q[2]}
-                  x2={q[2]}
-                  y1={y - 8}
-                  y2={y + 8}
-                  stroke="var(--accent)"
-                />
-              </g>
-            );
-          })}
-        </svg>
-      </section>
+      <ScoreDistribution result={result} />
       <section className="chart">
         <h3>Payoff matrix</h3>
         <p className="muted">
