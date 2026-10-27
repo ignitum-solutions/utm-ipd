@@ -661,6 +661,176 @@ footer small {
   font-size: 11px;
   color: var(--muted);
 }
+.score-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  font-size: 12px;
+}
+.score-toolbar p {
+  margin: 0;
+  color: #d2d8e2;
+}
+.score-toolbar label {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  cursor: pointer;
+}
+.score-axis,
+.score-row-button {
+  display: grid;
+  grid-template-columns: minmax(150px, 25%) minmax(0, 1fr) 88px;
+  align-items: center;
+  gap: 16px;
+}
+.score-axis {
+  padding: 16px 10px 12px;
+  color: var(--muted);
+  font-size: 11px;
+  border-bottom: 1px solid var(--line);
+}
+.score-axis > span:last-child {
+  text-align: right;
+  padding-right: 22px;
+}
+.score-ticks {
+  height: 22px;
+  position: relative;
+  font-variant-numeric: tabular-nums;
+}
+.score-ticks span {
+  position: absolute;
+  transform: translateX(-50%);
+}
+.score-axis-title {
+  display: block;
+  text-align: center;
+}
+.score-row {
+  position: relative;
+  border-bottom: 1px solid var(--line);
+}
+.score-row-button {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  padding: 10px;
+  min-height: 64px;
+  text-align: left;
+  font-size: 12px;
+}
+.score-row-button:hover:not(:disabled),
+.score-row-button:focus-visible {
+  background: #202632;
+}
+.score-name {
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+.score-row-button svg {
+  height: 42px;
+}
+.score-marks {
+  stroke: var(--accent);
+  fill: var(--accent-soft);
+  stroke-width: 2;
+}
+.score-marks > * {
+  vector-effect: non-scaling-stroke;
+}
+.score-marks circle {
+  fill: var(--accent);
+}
+.score-median {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-end;
+  font-variant-numeric: tabular-nums;
+}
+.score-median small {
+  display: none;
+}
+.score-median > span {
+  color: var(--accent);
+  width: 10px;
+}
+.score-values {
+  position: absolute;
+  inset: calc(100% - 4px) 10px auto;
+  background: #11151d;
+  border: 1px solid #505a6d;
+  box-shadow: 0 8px 24px #0006;
+  border-radius: 7px;
+  padding: 14px;
+  font-size: 12px;
+  z-index: 1;
+}
+.score-values.is-expanded {
+  position: static;
+  margin: 0 10px 12px;
+  box-shadow: none;
+}
+.score-values > strong {
+  display: block;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+.score-values dl {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  margin: 12px 0 0;
+}
+.score-values dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+.score-values dd {
+  margin: 5px 0 0;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.score-values p {
+  margin: 12px 0 0;
+  color: var(--muted);
+}
+.score-footnote {
+  margin-bottom: 0;
+}
+@media (max-width: 700px) {
+  .score-axis {
+    display: block;
+    padding: 12px 10px;
+  }
+  .score-axis > span {
+    display: none;
+  }
+  .score-row-button {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 5px 12px;
+    padding: 12px 10px;
+  }
+  .score-row-button svg {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .score-median {
+    gap: 6px;
+  }
+  .score-median small {
+    display: inline;
+    color: var(--muted);
+    font-size: 10px;
+  }
+  .score-values dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 .table-scroll {
   overflow: auto;
   max-width: 100%;
